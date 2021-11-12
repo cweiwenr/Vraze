@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<session version="1.0">&#x0A;<refactoring comment="Rename resource &apos;empty_MSP_EXP432P401R_nortos_ccs/practice.c&apos; to &apos;prac_test.c&apos;" description="Rename resource &apos;practice.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="practice.c" name="prac_test.c" stamp="1635313817714" updateReferences="true"/>&#x0A;<refactoring comment="Rename resource &apos;empty_MSP_EXP432P401R_nortos_ccs/prac_test.c&apos; to &apos;main.c&apos;" description="Rename resource &apos;prac_test.c&apos;" flags="7" id="org.eclipse.ltk.core.refactoring.rename.resource" input="prac_test.c" name="main.c" stamp="1635328605618" updateReferences="true"/>
+</session>
