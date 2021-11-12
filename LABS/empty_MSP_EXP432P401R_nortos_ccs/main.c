@@ -5,6 +5,7 @@
 /* Global Definitions */
 #define CAR_WAITING_INSTRUCTION     0x1
 #define CAR_RECEIVED_INSTRUCTION    0x2
+
 #define CAR_ENGINE_ON               0x1
 #define CAR_ENGINE_OFF              0x0
 #define CAR_WHEEL_STOP              0x0
@@ -34,7 +35,7 @@ uint32_t SR04IntTimes;
 
 //this instructions buffer holds all instructions yay
 char *instructionBuffer;
-uint8_t wifiStatus = CAR_ENGINE_ON;
+uint8_t wifiState = CAR_ENGINE_ON;
 // -------------------------------------------------------------------------------------------------------------------
 /* Timer_A PWM Configuration Parameter */
 Timer_A_PWMConfig pwmConfig = {
@@ -70,6 +71,25 @@ eUSCI_UART_ConfigV1 UART2Config = {
         EUSCI_A_UART_ONE_STOP_BIT,
         EUSCI_A_UART_MODE,
         EUSCI_A_UART_OVERSAMPLING_BAUDRATE_GENERATION };
+
+/**
+ * Methods
+ **/
+void Initialise_IO(void);
+void Initialise_CarMotor(void);
+void Initialise_EspUART(void);
+void Initialise_Encoder(void);
+void setWheelDirection(uint32_t dir);
+void checkForObstacle(void);
+
+static void InstructionDelay(uint32_t notches);
+static void Delay(uint32_t loop);
+
+void Initalise_HCSR04(void);
+static uint32_t getHCSR04Time(void);
+float getHCSR04Distance(void);
+// -------------------------------------------------------------------------------------------------------------------
+
 /*
  void ESP8266_Terminal(void)
  {
@@ -118,63 +138,24 @@ eUSCI_UART_ConfigV1 UART2Config = {
 
 void main()
 {
-    /*Initialize required hardware peripherals for the ESP8266*/
-    /*
-     MAP_GPIO_setAsPeripheralModuleFunctionInputPin(GPIO_PORT_P1, GPIO_PIN2 | GPIO_PIN3, GPIO_PRIMARY_MODULE_FUNCTION);
-     MAP_UART_initModule(EUSCI_A0_BASE, &UART0Config);
-     MAP_UART_enableModule(EUSCI_A0_BASE);
-     MAP_UART_enableInterrupt(EUSCI_A0_BASE, EUSCI_A_UART_RECEIVE_INTERRUPT);
-     MAP_Interrupt_enableInterrupt(INT_EUSCIA0);
-     */
     /* Stop Watchdog Timer */
     MAP_WDT_A_holdTimer();
 
-    /*Ensure MSP432 is Running at 24 MHz*/
-    FlashCtl_setWaitState(FLASH_BANK0, 2);
-    FlashCtl_setWaitState(FLASH_BANK1, 2);
-    PCM_setCoreVoltageLevel(PCM_VCORE1);
-    CS_setDCOCenteredFrequency(CS_DCO_FREQUENCY_24);
+    /* Initialise Engine State, Wifi State & Wheel Direction */
+    engineState = CAR_ENGINE_OFF; //Initialise Car Engine State to OFF
+    wheelDirection = CAR_WHEEL_STOP;
 
-    MAP_GPIO_setAsPeripheralModuleFunctionInputPin(GPIO_PORT_P3, GPIO_PIN2 | GPIO_PIN3, GPIO_PRIMARY_MODULE_FUNCTION);
-    MAP_UART_initModule(EUSCI_A2_BASE, &UART2Config);
-    MAP_UART_enableModule(EUSCI_A2_BASE);
-    MAP_UART_enableInterrupt(EUSCI_A2_BASE, EUSCI_A_UART_RECEIVE_INTERRUPT);
-    MAP_Interrupt_enableInterrupt(INT_EUSCIA2);
+    Initialise_IO();
+    Initialise_CarMotor();
+    Initialise_Encoder();
+    Initalise_HCSR04();
+    Initialise_EspUART();
 
-    /* switch 1.1 api post to thinkspeak test*/
-    MAP_GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P1, GPIO_PIN1);
-    MAP_GPIO_interruptEdgeSelect(GPIO_PORT_P1, GPIO_PIN1, GPIO_LOW_TO_HIGH_TRANSITION);
-    MAP_GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN1);
-    MAP_GPIO_enableInterrupt(GPIO_PORT_P1, GPIO_PIN1);
-    MAP_Interrupt_enableInterrupt(INT_PORT1);
-    MAP_GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
-    MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
-
-    /*Reset GPIO of the ESP8266*/
-    GPIO_setAsOutputPin(GPIO_PORT_P6, GPIO_PIN1);
-
-    MAP_Interrupt_enableMaster();
-
-    /* Reset ESP8266 to prevent timeout errors*/
-    ESP8266_HardReset();
-    __delay_cycles(48000000);
-    UART_Flush(EUSCI_A2_BASE);
-
-    /* Configure to start ESP8266 webserver*/
-    ESP8266_ChangeMode1();
-    //ESP8266_EnableMultipleConnections(1);
-    //ESP8266_DisconnectToAP();
-    //ESP8266_ConnectToAP("Reuben","lol12345678");
-    //ESP8266_ConnectToAP("CHONG_Fam","ibeeciejie");
-    //__delay_cycles(48000000);
-    //ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "5000");
-    ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "5000");
-    //ESP8266_startserver();
-
-    /*Start ESP8266 serial terminal, will not return*/
-    //ESP8266_Terminal();
-    /* Have to do this instruction first */
-    printf("Ready\n");
+    /* Enabling interrupts and starting the watchdog timer */
+    Interrupt_enableInterrupt(INT_PORT1);
+    Interrupt_enableInterrupt(INT_PORT2);
+    //Interrupt_enableSleepOnIsrExit();
+    Interrupt_enableMaster();
 
     /* Program's loop */
     while (1)
@@ -182,9 +163,9 @@ void main()
         while (ESP8266_WaitForAnswer(200))
         {
             // state 2 for instructions receive, please handle
-            wifiStatus = CAR_RECEIVED_INSTRUCTION;
+            wifiState = CAR_RECEIVED_INSTRUCTION;
         }
-        if (wifiStatus == CAR_RECEIVED_INSTRUCTION)
+        if (wifiState == CAR_RECEIVED_INSTRUCTION)
         {
             uint16_t i = 0;
             char c;
@@ -206,20 +187,139 @@ void main()
                 // when comparing the char, make sure its single quotation if not !=
 
                 if (c == 'F')
-                    printf("car is moving forward\n");
+                {
+                    if (engineState == CAR_ENGINE_ON)
+                    {
+                        pwmConfig.dutyCycle = 5000;
+                        pwmConfig2.dutyCycle = 5000;
+                        setWheelDirection(CAR_WHEEL_FORWARD);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+                        InstructionDelay(40);
+                    }
+                }
                 else if (c == 'B')
-                    printf("car is moving backward\n");
-                else if (c == 'R')
-                    printf("car is moving right\n");
+                {
+                    if (engineState == CAR_ENGINE_ON)
+                    {
+                        pwmConfig.dutyCycle = 5000;
+                        pwmConfig2.dutyCycle = 5000;
+                        setWheelDirection(CAR_WHEEL_BACKWARD);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+                        InstructionDelay(40);
+                    }
+                }
                 else if (c == 'L')
-                    printf("car is moving left\n");
+                {
+                    if (engineState == CAR_ENGINE_ON)
+                    {
+                        pwmConfig.dutyCycle = 0;
+                        pwmConfig2.dutyCycle = 5000;
+                        setWheelDirection(CAR_WHEEL_FORWARD_LEFT);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+                        InstructionDelay(40);
+                    }
+                }
+                else if (c == 'R')
+                {
+                    if (engineState == CAR_ENGINE_ON)
+                    {
+                        pwmConfig.dutyCycle = 5000;
+                        pwmConfig2.dutyCycle = 0;
+                        setWheelDirection(CAR_WHEEL_FORWARD_RIGHT);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                    }
+                }
+                else if (c == 'G')
+                {
+                    //printf("duty cycle1: %d\n",  pwmConfig.dutyCycle);
+                    //If engine is currently ON, set to OFF
+                    if (engineState == CAR_ENGINE_ON)
+                    {
+                        //Set Motor Duty Cycle to 0% (Off)
+                        pwmConfig.dutyCycle = 0;
+                        pwmConfig2.dutyCycle = 0;
+
+                        engineState = CAR_ENGINE_OFF;
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
+                        GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
+
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                    }
+                    else if (engineState == CAR_ENGINE_OFF)
+                    {
+                        //Set Motor Duty Cycle to 10% (On)
+                        pwmConfig.dutyCycle = 5000;
+                        pwmConfig2.dutyCycle = 5000;
+
+                        engineState = CAR_ENGINE_ON;
+                        setWheelDirection(CAR_WHEEL_FORWARD);
+                        GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN0);
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN1);
+
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+                        // Placeholder interrupt to handle and send data, can be a function for when esp wants to send data, but
+                        // if msp is in low pwr mode then need interrupt first, probs need to call the func in the interrupt
+                        // or just apply send logic to that interrupt
+                        char dataSend[] = "debo\r\n\r\n";
+                        uint32_t t = sizeof(dataSend) - 1;
+                        ESP8266_SendData(dataSend, t);
+
+                        MAP_GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
+                    }
+                }
+                else if (c == 'S')
+                {
+                    if (engineState == CAR_ENGINE_ON)
+                    {
+                        if (pwmConfig.dutyCycle == 9000)
+                            pwmConfig.dutyCycle = 0;
+                        else
+                            pwmConfig.dutyCycle += 1000;
+
+                        if (pwmConfig2.dutyCycle == 9000)
+                            pwmConfig2.dutyCycle = 0;
+                        else
+                            pwmConfig2.dutyCycle += 1000;
+                    }
+                    else
+                    {
+                        pwmConfig.dutyCycle = 0;
+                        pwmConfig2.dutyCycle = 0;
+                    }
+
+                    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                }
                 else
                     printf("random/n");
             }
             //can start to read instructions buffer and do soft interrupts OR make function calls
             printf("%s\n", instructionBuffer);
+
+            //Resets the Car
+            notchesDetected = 0;
+            engineState = CAR_ENGINE_OFF;
+
+            pwmConfig.dutyCycle = 0;
+            pwmConfig2.dutyCycle = 0;
+            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+            //Turn LED2 to RED when Car Engine State is OFF
+            GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
+            GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
         }
-        wifiStatus = CAR_WAITING_INSTRUCTION;
+        wifiState = CAR_WAITING_INSTRUCTION;
         // Go back to low power mode after handling all interrupts
         PCM_gotoLPM0();
     }
@@ -255,67 +355,18 @@ void PORT1_IRQHandler(void)
 
     if (status_for_switch1 & GPIO_PIN1) //Switch 1 (P1.1) On/Off Car Engine
     {
-        //If engine is currently ON, set to OFF
-        if (engineState == CAR_ENGINE_ON)
-        {
-            //Set Motor Duty Cycle to 0% (Off)
-            pwmConfig.dutyCycle = 0;
-            pwmConfig2.dutyCycle = 0;
+        // Placeholder interrupt to handle and send data, can be a function for when esp wants to send data, but
+        // if msp is in low pwr mode then need interrupt first, probs need to call the func in the interrupt
+        // or just apply send logic to that interrupt
+        char dataSend[] = "debo\r\n\r\n";
+        uint32_t t = sizeof(dataSend) - 1;
+        ESP8266_SendData(dataSend, t);
 
-            engineState = CAR_ENGINE_OFF;
-            GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
-            GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
-        }
-        else if (engineState == CAR_ENGINE_OFF)
-        {
-            //Set Motor Duty Cycle to 10% (On)
-            pwmConfig.dutyCycle = 1000;
-            pwmConfig2.dutyCycle = 1000;
+        MAP_GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
 
-            engineState = CAR_ENGINE_ON;
-            setWheelDirection(CAR_WHEEL_FORWARD);
-            GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN0);
-            GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN1);
+        MAP_GPIO_clearInterruptFlag(GPIO_PORT_P1, status_for_switch1);
 
-            // Placeholder interrupt to handle and send data, can be a function for when esp wants to send data, but
-            // if msp is in low pwr mode then need interrupt first, probs need to call the func in the interrupt
-            // or just apply send logic to that interrupt
-            char dataSend[] = "debo\r\n\r\n";
-            uint32_t t = sizeof(dataSend) - 1;
-            ESP8266_SendData(dataSend, t);
-
-            MAP_GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
-        }
-
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
     }
-    else if (status_for_switch1 & GPIO_PIN4) //Switch 2 (P1.4) Change Motor Speed
-    {
-        if (engineState == CAR_ENGINE_ON)
-        {
-            if (pwmConfig.dutyCycle == 9000)
-                pwmConfig.dutyCycle = 0;
-            else
-                pwmConfig.dutyCycle += 1000;
-
-            if (pwmConfig2.dutyCycle == 9000)
-                pwmConfig2.dutyCycle = 0;
-            else
-                pwmConfig2.dutyCycle += 1000;
-        }
-        else
-        {
-            pwmConfig.dutyCycle = 0;
-            pwmConfig2.dutyCycle = 0;
-        }
-
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-    }
-
-    MAP_GPIO_clearInterruptFlag(GPIO_PORT_P1, status_for_switch1);
-
 }
 
 void PORT2_IRQHandler(void)
@@ -324,18 +375,25 @@ void PORT2_IRQHandler(void)
 
     status = GPIO_getEnabledInterruptStatus(GPIO_PORT_P2);
     GPIO_clearInterruptFlag(GPIO_PORT_P2, status);
-    notchesDetected++;
+
+    if (status & GPIO_PIN6)
+        notchesDetected++;
+
+    printf(notchesDetected);
+    GPIO_clearInterruptFlag(GPIO_PORT_P2, status);
 }
 
 // -------------------------------------------------------------------------------------------------------------------
 
-void Initialise_Switches()
+void Initialise_IO()
 {
-    engineState = CAR_ENGINE_OFF; //Initialise Car Engine State to OFF
-    wheelDirection = CAR_WHEEL_STOP;
     GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P1, GPIO_PIN1);
+    GPIO_interruptEdgeSelect(GPIO_PORT_P1, GPIO_PIN1,
+    GPIO_LOW_TO_HIGH_TRANSITION);
     GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P1, GPIO_PIN4);
-    GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN1);
+    GPIO_interruptEdgeSelect(GPIO_PORT_P1, GPIO_PIN1,
+    GPIO_LOW_TO_HIGH_TRANSITION);
+    GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN4);
     GPIO_enableInterrupt(GPIO_PORT_P1, GPIO_PIN1);
     GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN4);
     GPIO_enableInterrupt(GPIO_PORT_P1, GPIO_PIN4);
@@ -370,6 +428,78 @@ void Initialise_CarMotor()
     GPIO_PRIMARY_MODULE_FUNCTION);
 }
 
+void Initialise_EspUART(void)
+{
+    /*Initialize required hardware peripherals for the ESP8266*/
+    /*
+     MAP_GPIO_setAsPeripheralModuleFunctionInputPin(GPIO_PORT_P1, GPIO_PIN2 | GPIO_PIN3, GPIO_PRIMARY_MODULE_FUNCTION);
+     MAP_UART_initModule(EUSCI_A0_BASE, &UART0Config);
+     MAP_UART_enableModule(EUSCI_A0_BASE);
+     MAP_UART_enableInterrupt(EUSCI_A0_BASE, EUSCI_A_UART_RECEIVE_INTERRUPT);
+     MAP_Interrupt_enableInterrupt(INT_EUSCIA0);
+     */
+
+    /*Ensure MSP432 is Running at 24 MHz*/
+    FlashCtl_setWaitState(FLASH_BANK0, 2);
+    FlashCtl_setWaitState(FLASH_BANK1, 2);
+    PCM_setCoreVoltageLevel(PCM_VCORE1);
+    CS_setDCOCenteredFrequency(CS_DCO_FREQUENCY_24);
+
+    MAP_GPIO_setAsPeripheralModuleFunctionInputPin(
+            GPIO_PORT_P3, GPIO_PIN2 | GPIO_PIN3,
+            GPIO_PRIMARY_MODULE_FUNCTION);
+    MAP_UART_initModule(EUSCI_A2_BASE, &UART2Config);
+    MAP_UART_enableModule(EUSCI_A2_BASE);
+    MAP_UART_enableInterrupt(EUSCI_A2_BASE, EUSCI_A_UART_RECEIVE_INTERRUPT);
+    MAP_Interrupt_enableInterrupt(INT_EUSCIA2);
+
+    /* switch 1.1 api post to thinkspeak test*/
+    MAP_GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P1, GPIO_PIN1);
+    MAP_GPIO_interruptEdgeSelect(GPIO_PORT_P1, GPIO_PIN1,
+    GPIO_LOW_TO_HIGH_TRANSITION);
+    MAP_GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN1);
+    MAP_GPIO_enableInterrupt(GPIO_PORT_P1, GPIO_PIN1);
+    MAP_Interrupt_enableInterrupt(INT_PORT1);
+    MAP_GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);
+    MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
+
+    /*Reset GPIO of the ESP8266*/
+    GPIO_setAsOutputPin(GPIO_PORT_P6, GPIO_PIN1);
+
+    /* Reset ESP8266 to prevent timeout errors*/
+    ESP8266_HardReset();
+    __delay_cycles(48000000);
+    UART_Flush(EUSCI_A2_BASE);
+
+    /* Configure to start ESP8266 webserver*/
+    ESP8266_ChangeMode1();
+    //ESP8266_EnableMultipleConnections(1);
+    //ESP8266_DisconnectToAP();
+    //ESP8266_ConnectToAP("Reuben","lol12345678");
+    //ESP8266_ConnectToAP("CHONG_Fam","ibeeciejie");
+    //__delay_cycles(48000000);
+    //ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "5000");
+    ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "5000");
+    //ESP8266_startserver();
+
+    /*Start ESP8266 serial terminal, will not return*/
+    //ESP8266_Terminal();
+    /* Have to do this instruction first */
+    printf("Ready\n");
+}
+
+void Initialise_Encoder(void)
+{
+    GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P2, GPIO_PIN6);
+    GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P2, GPIO_PIN7);
+
+    GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN6);
+    GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN7);
+    GPIO_enableInterrupt(GPIO_PORT_P2, GPIO_PIN6);
+    GPIO_enableInterrupt(GPIO_PORT_P2, GPIO_PIN7);
+
+}
+
 void setWheelDirection(uint32_t dir)
 {
     wheelDirection = dir;
@@ -394,17 +524,17 @@ void setWheelDirection(uint32_t dir)
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
     }
-    else if (dir & CAR_WHEEL_FORWARD_LEFT)
+    else if (dir & CAR_WHEEL_FORWARD_RIGHT)
     {
         //Left Wheel
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
-        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN2);
+        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
 
         //Right Wheel
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
     }
-    else if (dir & CAR_WHEEL_FORWARD_RIGHT)
+    else if (dir & CAR_WHEEL_FORWARD_LEFT)
     {
         //Left Wheel
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN0);
@@ -432,6 +562,15 @@ void setWheelDirection(uint32_t dir)
     }
 }
 
+void checkForObstacle(void)
+{
+    Delay(3000);
+    /* Obtain distance from HCSR04 sensor and check if its less then minimum distance */
+    if ((getHCSR04Distance() < MIN_DISTANCE))
+        setWheelDirection(CAR_WHEEL_STOP);
+    else
+        setWheelDirection(CAR_WHEEL_FORWARD);
+}
 // -------------------------------------------------------------------------------------------------------------------
 
 static void Delay(uint32_t loop)
@@ -440,6 +579,18 @@ static void Delay(uint32_t loop)
 
     for (i = 0; i < loop; i++)
         ;
+}
+
+static void InstructionDelay(uint32_t notches)
+{
+    while (1)
+    {
+        if (notchesDetected == notches)
+        {
+            notchesDetected = 0;
+            break;
+        }
+    }
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -451,7 +602,7 @@ void Initalise_HCSR04(void)
     TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source
             TIMER_A_CLOCKSOURCE_DIVIDER_3,          // SMCLK/3 = 1MHz
             TICKPERIOD,                             // 1000 tick period
-            TIMER_A_TAIE_INTERRUPT_DISABLE,         // Disable Timer interrupt
+            TIMER_A_TAIE_INTERRUPT_DISABLE,       // Disable Timer interrupt
             TIMER_A_CCIE_CCR0_INTERRUPT_ENABLE,    // Enable CCR0 interrupt
             TIMER_A_DO_CLEAR                        // Clear value
             };
@@ -460,7 +611,7 @@ void Initalise_HCSR04(void)
 
     /* Configuring P3.6 as Output */
     GPIO_setAsOutputPin(GPIO_PORT_P3, GPIO_PIN6);                        //
-    GPIO_setOutputLowOnPin(GPIO_PORT_P3, GPIO_PIN6);                        //
+    GPIO_setOutputLowOnPin(GPIO_PORT_P3, GPIO_PIN6);                      //
 
     GPIO_setAsInputPinWithPullDownResistor(GPIO_PORT_P3, GPIO_PIN7);
 
