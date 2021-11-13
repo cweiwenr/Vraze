@@ -29,6 +29,15 @@ const uint32_t RPM = 60;
  *******************************************************************************/
 volatile uint32_t engineState = CAR_ENGINE_OFF;
 volatile uint32_t notchesDetected = 0;
+volatile uint32_t rounds = 0;
+volatile uint32_t leftNotchesDetected = 0;
+volatile uint32_t leftRounds = 0;
+float cRPM = 0;
+/* variables for getting sped*/
+uint32_t roundsInterrupt;
+
+
+
 volatile float speed = 0.0f;
 uint32_t wheelDirection = CAR_WHEEL_STOP;
 uint32_t SR04IntTimes;
@@ -39,30 +48,25 @@ uint8_t wifiState = CAR_ENGINE_ON;
 // -------------------------------------------------------------------------------------------------------------------
 /* Timer_A PWM Configuration Parameter */
 Timer_A_PWMConfig pwmConfig = {
-TIMER_A_CLOCKSOURCE_SMCLK,
+                                TIMER_A_CLOCKSOURCE_SMCLK,
                                 TIMER_A_CLOCKSOURCE_DIVIDER_24, 10000,
                                 TIMER_A_CAPTURECOMPARE_REGISTER_1,
                                 TIMER_A_OUTPUTMODE_RESET_SET, 1000 };
 
 Timer_A_PWMConfig pwmConfig2 = {
-TIMER_A_CLOCKSOURCE_SMCLK,
+                                 TIMER_A_CLOCKSOURCE_SMCLK,
                                  TIMER_A_CLOCKSOURCE_DIVIDER_24, 10000,
                                  TIMER_A_CAPTURECOMPARE_REGISTER_2,
                                  TIMER_A_OUTPUTMODE_RESET_SET, 1000 };
 
-/*
- eUSCI_UART_ConfigV1 UART0Config =
- {
- EUSCI_A_UART_CLOCKSOURCE_SMCLK,
- 13,
- 0,
- 37,
- EUSCI_A_UART_NO_PARITY,
- EUSCI_A_UART_LSB_FIRST,
- EUSCI_A_UART_ONE_STOP_BIT,
- EUSCI_A_UART_MODE,
- EUSCI_A_UART_OVERSAMPLING_BAUDRATE_GENERATION
- };*/
+const Timer_A_UpModeConfig upConfig = {
+            TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source
+            TIMER_A_CLOCKSOURCE_DIVIDER_3,          // SMCLK/3 = 1MHz
+            TICKPERIOD,                             // 1000 tick period
+            TIMER_A_TAIE_INTERRUPT_DISABLE,         // Disable Timer interrupt
+            TIMER_A_CCIE_CCR0_INTERRUPT_ENABLE,     // Enable CCR0 interrupt
+            TIMER_A_DO_CLEAR                        // Clear value
+            };
 
 eUSCI_UART_ConfigV1 UART2Config = {
         EUSCI_A_UART_CLOCKSOURCE_SMCLK, 13, 0, 37,
@@ -82,6 +86,8 @@ void Initialise_Encoder(void);
 void setWheelDirection(uint32_t dir);
 void checkForObstacle(void);
 
+void Initialise_TimerA1(void);
+
 static void InstructionDelay(uint32_t notches);
 static void Delay(uint32_t loop);
 
@@ -89,52 +95,8 @@ void Initalise_HCSR04(void);
 static uint32_t getHCSR04Time(void);
 float getHCSR04Distance(void);
 // -------------------------------------------------------------------------------------------------------------------
-
-/*
- void ESP8266_Terminal(void)
- {
- while(1)
- {
- //* variable to store channel
- uint8_t ESP_channel = 5;    //get response channel that esp is using
- char * separator = "=";
-
- //* call function to populate ESP buffer with data
- // getData();
- UART_Gets(EUSCI_A2_BASE, ESP8266_Buffer, 2048);
- UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
- __delay_cycles(48000000);
- if(strstr(ESP8266_Buffer, "+IPD,0") != NULL)
- ESP_channel = 0;
- else if(strstr(ESP8266_Buffer, "+IPD,1") != NULL)
- ESP_channel = 1;
- else if(strstr(ESP8266_Buffer, "+IPD,2") != NULL)
- ESP_channel = 2;
- else if(strstr(ESP8266_Buffer, "+IPD,3") != NULL)
- ESP_channel = 3;
- else if(strstr(ESP8266_Buffer, "+IPD,4") != NULL)
- ESP_channel = 4;
-
-
- if(strstr(ESP8266_Buffer, "instructions=") != NULL)
- {
- instructionBuffer = strtok(ESP8266_Buffer, separator);
- instructionBuffer = strtok(NULL, ESP8266_Buffer);
- UART_Printf(EUSCI_A0_BASE, instructionBuffer);
- }
- if (ESP_channel != 5)
- {
- //*Data that will be sent to the HTTP server
- char HTTP_Request[] = "POST /test HTTP/1.1\r\nHost: 192.168.157.22:5000\r\nContent-Type: application/json\r\nContent-length: 11\r\n\r\n{\"test\": 3}";
- uint32_t HTTP_Request_Size = sizeof(HTTP_Request) - 1;
- ESP8266_SendData(ESP_channel, HTTP_Request, HTTP_Request_Size);
- __delay_cycles(48000000);
- UART_Printf(EUSCI_A2_BASE, "AT+CIPCLOSE=%i\r\n", ESP_channel);
- ESP_channel = 5;
- }
- }
- }
- */
+uint16_t targetPosition = 42;
+uint16_t currentPosition;
 
 void main()
 {
@@ -149,6 +111,7 @@ void main()
     Initialise_CarMotor();
     Initialise_Encoder();
     Initalise_HCSR04();
+    Initialise_TimerA1();
     Initialise_EspUART();
 
     /* Enabling interrupts and starting the watchdog timer */
@@ -156,7 +119,7 @@ void main()
     Interrupt_enableInterrupt(INT_PORT2);
     //Interrupt_enableSleepOnIsrExit();
     Interrupt_enableMaster();
-
+    Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
     /* Program's loop */
     while (1)
     {
@@ -167,6 +130,9 @@ void main()
         }
         if (wifiState == CAR_RECEIVED_INSTRUCTION)
         {
+            //Get the engine started
+            engineState = CAR_ENGINE_ON;
+
             uint16_t i = 0;
             char c;
             char temp[2048];
@@ -180,6 +146,7 @@ void main()
             // temporary loop to loop through string to read instructions
             for (i; temp[i]; i++)
             {
+
                 //remember to change the state of the the car aft reading each char, according to the char
                 c = temp[i];
                 // if (c == "W")
@@ -188,57 +155,112 @@ void main()
 
                 if (c == 'F')
                 {
+
                     if (engineState == CAR_ENGINE_ON)
                     {
-                        pwmConfig.dutyCycle = 5000;
-                        pwmConfig2.dutyCycle = 5000;
-                        setWheelDirection(CAR_WHEEL_FORWARD);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                        /* Each round of the wheel is 21.36cm, our application takes each block's length to be 21.36cm*/
+                        currentPosition = rounds * 21;
+                        if (currentPosition < targetPosition)
+                        {
+                            pwmConfig.dutyCycle = 7000;
+                            pwmConfig2.dutyCycle = 7000;
+                            setWheelDirection(CAR_WHEEL_FORWARD);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                            Delay(3000);
+                            currentPosition = rounds * 21;
+                            /* Loop logic here for PID*/
+                            //printf("actually here \n");
 
-                        InstructionDelay(40);
+                        }
+                        while (currentPosition <= targetPosition)
+                        {
+                            currentPosition = rounds * 21;
+                        }
+
                     }
                 }
                 else if (c == 'B')
                 {
                     if (engineState == CAR_ENGINE_ON)
                     {
-                        pwmConfig.dutyCycle = 5000;
-                        pwmConfig2.dutyCycle = 5000;
-                        setWheelDirection(CAR_WHEEL_BACKWARD);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
 
-                        InstructionDelay(40);
+                        currentPosition = rounds * 21;
+                        if (currentPosition < targetPosition)
+                        {
+                            pwmConfig.dutyCycle = 7000;
+                            pwmConfig2.dutyCycle = 7000;
+                            setWheelDirection(CAR_WHEEL_BACKWARD);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                            Delay(3000);
+                            currentPosition = rounds * 21;
+                            /* Loop logic here for PID*/
+                            //printf("actually here \n");
+
+                        }
+                        while (currentPosition <= targetPosition)
+                        {
+                            currentPosition = rounds * 21;
+                        }
                     }
                 }
                 else if (c == 'L')
                 {
                     if (engineState == CAR_ENGINE_ON)
                     {
-                        pwmConfig.dutyCycle = 0;
-                        pwmConfig2.dutyCycle = 5000;
-                        setWheelDirection(CAR_WHEEL_FORWARD_LEFT);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                        /* Each round of the wheel is 21.36cm, our application takes each block's length to be 21.36cm*/
+                        currentPosition = rounds * 21;
+                        if (currentPosition < targetPosition - 21)
+                        {
+                            pwmConfig.dutyCycle = 0;
+                            pwmConfig2.dutyCycle = 7000;
+                            setWheelDirection(CAR_WHEEL_FORWARD_LEFT);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                            /* Rounds aren't updated instantly, so may need to add aslight delay here*/
+                            Delay(3000);
+                            currentPosition = rounds * 21;
+                            /* Loop logic here for PID*/
+                            //printf("actually here \n");
 
-                        InstructionDelay(40);
+                        }
+                        while (currentPosition <= targetPosition - 21)
+                        {
+                            currentPosition = rounds * 21;
+                        }
                     }
                 }
                 else if (c == 'R')
                 {
                     if (engineState == CAR_ENGINE_ON)
                     {
-                        pwmConfig.dutyCycle = 5000;
-                        pwmConfig2.dutyCycle = 0;
-                        setWheelDirection(CAR_WHEEL_FORWARD_RIGHT);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+                        currentPosition = leftRounds * 21;
+                        if (currentPosition < targetPosition - 21)
+                        {
+                            pwmConfig.dutyCycle = 7000;
+                            pwmConfig2.dutyCycle = 0;
+                            setWheelDirection(CAR_WHEEL_FORWARD_RIGHT);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                            /* Rounds aren't updated instantly, so may need to add aslight delay here*/
+                            Delay(3000);
+                            currentPosition = rounds * 21;
+                            /* Loop logic here for PID*/
+                            //printf("actually here \n");
+
+                        }
+                        while (currentPosition <= targetPosition - 21)
+                        {
+                            currentPosition = leftRounds * 21;
+                        }
                     }
                 }
+                /*
                 else if (c == 'G')
                 {
-                    //printf("duty cycle1: %d\n",  pwmConfig.dutyCycle);
+
                     //If engine is currently ON, set to OFF
                     if (engineState == CAR_ENGINE_ON)
                     {
@@ -277,6 +299,7 @@ void main()
                         MAP_GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                     }
                 }
+                */
                 else if (c == 'S')
                 {
                     if (engineState == CAR_ENGINE_ON)
@@ -300,51 +323,35 @@ void main()
                     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
                     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
                 }
-                else
-                    printf("random/n");
+
+                currentPosition = 0;
+                rounds = 0;
+
             }
             //can start to read instructions buffer and do soft interrupts OR make function calls
             printf("%s\n", instructionBuffer);
-
-            //Resets the Car
-            notchesDetected = 0;
-            engineState = CAR_ENGINE_OFF;
-
-            pwmConfig.dutyCycle = 0;
-            pwmConfig2.dutyCycle = 0;
-            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-
-            //Turn LED2 to RED when Car Engine State is OFF
-            GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
-            GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
         }
+
+        engineState = CAR_ENGINE_OFF;
+
+        pwmConfig.dutyCycle = 0;
+        pwmConfig2.dutyCycle = 0;
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
+        //Turn LED2 to RED when Car Engine State is OFF
+        //GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
+        //GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
+
+        currentPosition = 0;
+        rounds = 0;
+        leftRounds = 0;
         wifiState = CAR_WAITING_INSTRUCTION;
         // Go back to low power mode after handling all interrupts
         PCM_gotoLPM0();
     }
 
 }
-/*
- void ESP8266_Terminal(void)
- {
- while(1)
- {
- UART_Gets(EUSCI_A0_BASE, ESP8266_Buffer, 128);
- UART_Printf(EUSCI_A2_BASE, ESP8266_Buffer);
-
- __delay_cycles(48000000);
- if(!ESP8266_WaitForAnswer(ESP8266_RECEIVE_TRIES))
- {
- UART_Printf(EUSCI_A0_BASE, "ESP8266 receive timeout error\r\n");
- }
- else
- {
- UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
- }
-
- }
- }*/
 
 /****************** Interrupt Handlers ******************/
 void PORT1_IRQHandler(void)
@@ -374,16 +381,62 @@ void PORT2_IRQHandler(void)
     uint32_t status; //Stores the pin that trigger the interrupt
 
     status = GPIO_getEnabledInterruptStatus(GPIO_PORT_P2);
-    GPIO_clearInterruptFlag(GPIO_PORT_P2, status);
 
-    if (status & GPIO_PIN6)
+    if (status & GPIO_PIN7)
+    {
+        if (notchesDetected == 0)
+        {
+            /* Start the timer to get seconds per round for pid*/
+            roundsInterrupt = 0;
+            Timer_A_clearTimer(TIMER_A1_BASE);
+            Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
+        }
         notchesDetected++;
+        if (notchesDetected == 20)
+        {
+            rounds++;
+            notchesDetected = 0;
+            Timer_A_stopTimer(TIMER_A1_BASE);
+            roundsInterrupt *= TICKPERIOD;
+            /* Time in microseconds per round*/
+            roundsInterrupt += Timer_A_getCounterValue(TIMER_A1_BASE);
+            Timer_A_clearTimer(TIMER_A1_BASE);
+            /* current RPM for the recorded round*/
+            cRPM = 1 / ((roundsInterrupt / 1000000.0) / 60.0);
 
-    printf(notchesDetected);
+        }
+    }
+    else if (status & GPIO_PIN6)
+    {
+        leftNotchesDetected++;
+        if (leftNotchesDetected == 20)
+        {
+            leftRounds++;
+            leftNotchesDetected = 0;
+        }
+    }
+    //printf("%i\n", notchesDetected);
+
     GPIO_clearInterruptFlag(GPIO_PORT_P2, status);
 }
 
+void TA1_0_IRQHandler(void)
+{
+    // Increment global variable (count number of interrupt occurred)
+    roundsInterrupt++;
+
+    // Clear interrupt flag
+    Timer_A_clearCaptureCompareInterrupt(TIMER_A1_BASE, TIMER_A_CAPTURECOMPARE_REGISTER_0);
+}
+
 // -------------------------------------------------------------------------------------------------------------------
+
+void Initialise_TimerA1()
+{
+    Timer_A_configureUpMode(TIMER_A1_BASE, &upConfig);
+    Interrupt_enableInterrupt(INT_TA1_0);
+    Timer_A_clearTimer(TIMER_A1_BASE);
+}
 
 void Initialise_IO()
 {
@@ -473,25 +526,25 @@ void Initialise_EspUART(void)
 
     /* Configure to start ESP8266 webserver*/
     ESP8266_ChangeMode1();
-    //ESP8266_EnableMultipleConnections(1);
     //ESP8266_DisconnectToAP();
     //ESP8266_ConnectToAP("Reuben","lol12345678");
     //ESP8266_ConnectToAP("CHONG_Fam","ibeeciejie");
     //__delay_cycles(48000000);
-    //ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "5000");
-    ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "5000");
-    //ESP8266_startserver();
+    ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "5000");
+    //ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "5000");
 
-    /*Start ESP8266 serial terminal, will not return*/
-    //ESP8266_Terminal();
-    /* Have to do this instruction first */
-    printf("Ready\n");
 }
 
 void Initialise_Encoder(void)
 {
     GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P2, GPIO_PIN6);
     GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P2, GPIO_PIN7);
+
+    /* Need extra 3v3, so use GPIO to supply the 3v3*/
+    GPIO_setAsOutputPin(GPIO_PORT_P5, GPIO_PIN4);
+    GPIO_setAsOutputPin(GPIO_PORT_P5, GPIO_PIN7);
+    GPIO_setOutputHighOnPin(GPIO_PORT_P5, GPIO_PIN4);
+    GPIO_setOutputHighOnPin(GPIO_PORT_P5, GPIO_PIN7);
 
     GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN6);
     GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN7);
@@ -598,14 +651,7 @@ static void InstructionDelay(uint32_t notches)
 void Initalise_HCSR04(void)
 {
     /* Timer_A UpMode Configuration Parameter */
-    const Timer_A_UpModeConfig upConfig = {
-    TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source
-            TIMER_A_CLOCKSOURCE_DIVIDER_3,          // SMCLK/3 = 1MHz
-            TICKPERIOD,                             // 1000 tick period
-            TIMER_A_TAIE_INTERRUPT_DISABLE,       // Disable Timer interrupt
-            TIMER_A_CCIE_CCR0_INTERRUPT_ENABLE,    // Enable CCR0 interrupt
-            TIMER_A_DO_CLEAR                        // Clear value
-            };
+
 
     int a = CS_getSMCLK();
 
