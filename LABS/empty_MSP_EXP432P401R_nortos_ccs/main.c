@@ -1,6 +1,7 @@
 #include <ti/devices/msp432p4xx/driverlib/driverlib.h>
 #include <ESP8266.h>
 #include <UART_Driver.h>
+#include <math.h>
 
 /* Global Definitions */
 #define CAR_WAITING_INSTRUCTION     0x1
@@ -11,9 +12,9 @@
 #define CAR_WHEEL_STOP              0x0
 #define CAR_WHEEL_FORWARD           0x1
 #define CAR_WHEEL_BACKWARD          0x2
-#define CAR_WHEEL_FORWARD_LEFT      0x5
+#define CAR_WHEEL_LEFT              0x5
 #define CAR_WHEEL_BACKWARD_LEFT     0x6
-#define CAR_WHEEL_FORWARD_RIGHT     0x9
+#define CAR_WHEEL_RIGHT             0x9
 #define CAR_WHEEL_BACKWARD_RIGHT    0xA
 #define MIN_DISTANCE                15.0f
 #define TICKPERIOD                  1000
@@ -24,19 +25,38 @@ const uint32_t RPM = 60;
  * Global Variables
  *
  * engineState          - Stores the State of the Car Engine
- * notchesDetected      - Stores the number of notches detected
+ * rightNotchesDetected      - Stores the number of notches detected
  * instructionBuffer    - A buffer to store all the instructions
  *******************************************************************************/
 volatile uint32_t engineState = CAR_ENGINE_OFF;
-volatile uint32_t notchesDetected = 0;
-volatile uint32_t rounds = 0;
+
+/* position of the encoder*/
+volatile uint32_t rightNotchesDetected = 0;
 volatile uint32_t leftNotchesDetected = 0;
-volatile uint32_t leftRounds = 0;
-float cRPM = 0;
-/* variables for getting sped*/
-uint32_t roundsInterrupt;
+volatile uint32_t notches = 40;     //2 rounds
+volatile uint32_t timeSeconds = 0;
 
+volatile float leftSpeed = 0;
+volatile float rightSpeed = 0;
 
+volatile float leftRPM = 0;
+volatile float rightRPM = 0;
+
+volatile float leftError = 0;
+volatile float rightError = 0;
+
+float errorTl;
+float errorTr;
+float lastErrorL;
+float lastErrorR;
+float proportionL;
+float proportionR;
+float integralL;
+float integralR;
+float derivativeL;
+float derivativeR;
+
+void getPIDOutput(void);
 
 volatile float speed = 0.0f;
 uint32_t wheelDirection = CAR_WHEEL_STOP;
@@ -47,34 +67,64 @@ char *instructionBuffer;
 uint8_t wifiState = CAR_ENGINE_ON;
 // -------------------------------------------------------------------------------------------------------------------
 /* Timer_A PWM Configuration Parameter */
-Timer_A_PWMConfig pwmConfig = {
-                                TIMER_A_CLOCKSOURCE_SMCLK,
-                                TIMER_A_CLOCKSOURCE_DIVIDER_24, 10000,
-                                TIMER_A_CAPTURECOMPARE_REGISTER_1,
-                                TIMER_A_OUTPUTMODE_RESET_SET, 1000 };
+Timer_A_PWMConfig pwmConfig =
+{
+    TIMER_A_CLOCKSOURCE_SMCLK,
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,
+    10000,
+    TIMER_A_CAPTURECOMPARE_REGISTER_1,
+    TIMER_A_OUTPUTMODE_RESET_SET,
+    0
+};
 
-Timer_A_PWMConfig pwmConfig2 = {
-                                 TIMER_A_CLOCKSOURCE_SMCLK,
-                                 TIMER_A_CLOCKSOURCE_DIVIDER_24, 10000,
-                                 TIMER_A_CAPTURECOMPARE_REGISTER_2,
-                                 TIMER_A_OUTPUTMODE_RESET_SET, 1000 };
+Timer_A_PWMConfig pwmConfig2 =
+{
+    TIMER_A_CLOCKSOURCE_SMCLK,
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,
+    10000,
+    TIMER_A_CAPTURECOMPARE_REGISTER_2,
+    TIMER_A_OUTPUTMODE_RESET_SET,
+    0
+};
 
-const Timer_A_UpModeConfig upConfig = {
-            TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source
-            TIMER_A_CLOCKSOURCE_DIVIDER_3,          // SMCLK/3 = 1MHz
-            TICKPERIOD,                             // 1000 tick period
-            TIMER_A_TAIE_INTERRUPT_DISABLE,         // Disable Timer interrupt
-            TIMER_A_CCIE_CCR0_INTERRUPT_ENABLE,     // Enable CCR0 interrupt
-            TIMER_A_DO_CLEAR                        // Clear value
-            };
+/* Set Timer to calculate speed*/
+const Timer_A_UpModeConfig upConfig =
+{
+    TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,         // SMCLK/12 = 2MHz
+    1000,                                   // 10000 tick period
+    TIMER_A_TAIE_INTERRUPT_DISABLE,         // Disable Timer interrupt
+    TIMER_A_CCIE_CCR0_INTERRUPT_ENABLE,     // Enable CCR0 interrupt
+    TIMER_A_DO_CLEAR                        // Clear value
+};
 
-eUSCI_UART_ConfigV1 UART2Config = {
-        EUSCI_A_UART_CLOCKSOURCE_SMCLK, 13, 0, 37,
-        EUSCI_A_UART_NO_PARITY,
-        EUSCI_A_UART_LSB_FIRST,
-        EUSCI_A_UART_ONE_STOP_BIT,
-        EUSCI_A_UART_MODE,
-        EUSCI_A_UART_OVERSAMPLING_BAUDRATE_GENERATION };
+const Timer_A_ContinuousModeConfig ContmConfig =
+{
+    TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,          // SMCLK/8 = 3MHz
+    TIMER_A_TAIE_INTERRUPT_DISABLE,         // Disable Timer interrupt
+    TIMER_A_DO_CLEAR
+};
+
+const Timer_A_UpModeConfig upConfigEncoder =
+{
+    TIMER_A_CLOCKSOURCE_ACLK,
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,
+    32678,                           // 1 second timer
+    TIMER_A_TAIE_INTERRUPT_DISABLE,
+    TIMER_A_CCIE_CCR0_INTERRUPT_ENABLE,
+    TIMER_A_DO_CLEAR
+};
+
+eUSCI_UART_ConfigV1 UART2Config =
+{
+    EUSCI_A_UART_CLOCKSOURCE_SMCLK, 13, 0, 37,
+    EUSCI_A_UART_NO_PARITY,
+    EUSCI_A_UART_LSB_FIRST,
+    EUSCI_A_UART_ONE_STOP_BIT,
+    EUSCI_A_UART_MODE,
+    EUSCI_A_UART_OVERSAMPLING_BAUDRATE_GENERATION
+};
 
 /**
  * Methods
@@ -88,21 +138,21 @@ void checkForObstacle(void);
 
 void Initialise_TimerA1(void);
 
-static void InstructionDelay(uint32_t notches);
 static void Delay(uint32_t loop);
 
 void Initalise_HCSR04(void);
 static uint32_t getHCSR04Time(void);
 float getHCSR04Distance(void);
+void clearCounters(void);
 // -------------------------------------------------------------------------------------------------------------------
-uint16_t targetPosition = 42;
-uint16_t currentPosition;
+
 
 void main()
 {
+
     /* Stop Watchdog Timer */
     MAP_WDT_A_holdTimer();
-
+    CS_setDCOCenteredFrequency(CS_DCO_FREQUENCY_3);
     /* Initialise Engine State, Wifi State & Wheel Direction */
     engineState = CAR_ENGINE_OFF; //Initialise Car Engine State to OFF
     wheelDirection = CAR_WHEEL_STOP;
@@ -110,7 +160,7 @@ void main()
     Initialise_IO();
     Initialise_CarMotor();
     Initialise_Encoder();
-    Initalise_HCSR04();
+    //Initalise_HCSR04();
     Initialise_TimerA1();
     Initialise_EspUART();
 
@@ -119,8 +169,9 @@ void main()
     Interrupt_enableInterrupt(INT_PORT2);
     //Interrupt_enableSleepOnIsrExit();
     Interrupt_enableMaster();
-    Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
+    //Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
     /* Program's loop */
+    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
     while (1)
     {
         while (ESP8266_WaitForAnswer(200))
@@ -146,211 +197,214 @@ void main()
             // temporary loop to loop through string to read instructions
             for (i; temp[i]; i++)
             {
-
-                //remember to change the state of the the car aft reading each char, according to the char
                 c = temp[i];
-                // if (c == "W")
-                //printf("call while loop function");
-                // when comparing the char, make sure its single quotation if not !=
-
                 if (c == 'F')
                 {
-
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                     if (engineState == CAR_ENGINE_ON)
                     {
-                        /* Each round of the wheel is 21.36cm, our application takes each block's length to be 21.36cm*/
-                        currentPosition = rounds * 21;
-                        if (currentPosition < targetPosition)
+                        setWheelDirection(CAR_WHEEL_FORWARD);
+                        Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
+                        while(rightNotchesDetected < notches)
                         {
-                            pwmConfig.dutyCycle = 7000;
-                            pwmConfig2.dutyCycle = 7000;
-                            setWheelDirection(CAR_WHEEL_FORWARD);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-                            Delay(3000);
-                            currentPosition = rounds * 21;
-                            /* Loop logic here for PID*/
-                            //printf("actually here \n");
-
+                            getPIDOutput();
                         }
-                        while (currentPosition <= targetPosition)
-                        {
-                            currentPosition = rounds * 21;
-                        }
+                        pwmConfig.dutyCycle = 0;
+                        pwmConfig2.dutyCycle = 0;
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                        Timer_A_stopTimer(TIMER_A1_BASE);
+                        clearCounters();
 
                     }
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                 }
                 else if (c == 'B')
                 {
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                     if (engineState == CAR_ENGINE_ON)
                     {
-
-                        currentPosition = rounds * 21;
-                        if (currentPosition < targetPosition)
+                        setWheelDirection(CAR_WHEEL_BACKWARD);
+                        Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
+                        while(rightNotchesDetected < notches)
                         {
-                            pwmConfig.dutyCycle = 7000;
-                            pwmConfig2.dutyCycle = 7000;
-                            setWheelDirection(CAR_WHEEL_BACKWARD);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-                            Delay(3000);
-                            currentPosition = rounds * 21;
-                            /* Loop logic here for PID*/
-                            //printf("actually here \n");
-
+                            getPIDOutput();
                         }
-                        while (currentPosition <= targetPosition)
-                        {
-                            currentPosition = rounds * 21;
-                        }
+                        pwmConfig.dutyCycle = 0;
+                        pwmConfig2.dutyCycle = 0;
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                        Timer_A_stopTimer(TIMER_A1_BASE);
+                        clearCounters();
                     }
-                }
-                else if (c == 'L')
-                {
-                    if (engineState == CAR_ENGINE_ON)
-                    {
-                        /* Each round of the wheel is 21.36cm, our application takes each block's length to be 21.36cm*/
-                        currentPosition = rounds * 21;
-                        if (currentPosition < targetPosition - 21)
-                        {
-                            pwmConfig.dutyCycle = 0;
-                            pwmConfig2.dutyCycle = 7000;
-                            setWheelDirection(CAR_WHEEL_FORWARD_LEFT);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-                            /* Rounds aren't updated instantly, so may need to add aslight delay here*/
-                            Delay(3000);
-                            currentPosition = rounds * 21;
-                            /* Loop logic here for PID*/
-                            //printf("actually here \n");
-
-                        }
-                        while (currentPosition <= targetPosition - 21)
-                        {
-                            currentPosition = rounds * 21;
-                        }
-                    }
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                 }
                 else if (c == 'R')
                 {
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                     if (engineState == CAR_ENGINE_ON)
                     {
+                        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN2);
 
-                        currentPosition = leftRounds * 21;
-                        if (currentPosition < targetPosition - 21)
+                        //Right Wheel
+                        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN4);
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN5);
+                        //setWheelDirection(CAR_WHEEL_LEFT);
+                        Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
+                        while(rightNotchesDetected <= 10)
                         {
-                            pwmConfig.dutyCycle = 7000;
-                            pwmConfig2.dutyCycle = 0;
-                            setWheelDirection(CAR_WHEEL_FORWARD_RIGHT);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                            Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-                            /* Rounds aren't updated instantly, so may need to add aslight delay here*/
-                            Delay(3000);
-                            currentPosition = rounds * 21;
-                            /* Loop logic here for PID*/
-                            //printf("actually here \n");
-
+                            getPIDOutput();
                         }
-                        while (currentPosition <= targetPosition - 21)
-                        {
-                            currentPosition = leftRounds * 21;
-                        }
-                    }
-                }
-                /*
-                else if (c == 'G')
-                {
-
-                    //If engine is currently ON, set to OFF
-                    if (engineState == CAR_ENGINE_ON)
-                    {
-                        //Set Motor Duty Cycle to 0% (Off)
                         pwmConfig.dutyCycle = 0;
                         pwmConfig2.dutyCycle = 0;
-
-                        engineState = CAR_ENGINE_OFF;
-                        GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
-                        GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
-
                         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
                         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                        Timer_A_stopTimer(TIMER_A1_BASE);
+                        clearCounters();
                     }
-                    else if (engineState == CAR_ENGINE_OFF)
-                    {
-                        //Set Motor Duty Cycle to 10% (On)
-                        pwmConfig.dutyCycle = 5000;
-                        pwmConfig2.dutyCycle = 5000;
-
-                        engineState = CAR_ENGINE_ON;
-                        setWheelDirection(CAR_WHEEL_FORWARD);
-                        GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN0);
-                        GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN1);
-
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-
-                        // Placeholder interrupt to handle and send data, can be a function for when esp wants to send data, but
-                        // if msp is in low pwr mode then need interrupt first, probs need to call the func in the interrupt
-                        // or just apply send logic to that interrupt
-                        char dataSend[] = "debo\r\n\r\n";
-                        uint32_t t = sizeof(dataSend) - 1;
-                        ESP8266_SendData(dataSend, t);
-
-                        MAP_GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
-                    }
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                 }
-                */
-                else if (c == 'S')
+                else if (c == 'L')
                 {
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                     if (engineState == CAR_ENGINE_ON)
                     {
-                        if (pwmConfig.dutyCycle == 9000)
-                            pwmConfig.dutyCycle = 0;
-                        else
-                            pwmConfig.dutyCycle += 1000;
+                        Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
+                        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN0);
 
-                        if (pwmConfig2.dutyCycle == 9000)
-                            pwmConfig2.dutyCycle = 0;
-                        else
-                            pwmConfig2.dutyCycle += 1000;
-                    }
-                    else
-                    {
+                        //Right Wheel
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
+                        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
+                        //setWheelDirection(CAR_WHEEL_RIGHT);
+                        while(rightNotchesDetected <= 10)
+                        {
+                            getPIDOutput();
+                        }
                         pwmConfig.dutyCycle = 0;
                         pwmConfig2.dutyCycle = 0;
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+                        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                        Timer_A_stopTimer(TIMER_A1_BASE);
+                        clearCounters();
                     }
-
-                    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-                    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+                    GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
                 }
-
-                currentPosition = 0;
-                rounds = 0;
-
             }
-            //can start to read instructions buffer and do soft interrupts OR make function calls
-            printf("%s\n", instructionBuffer);
+
         }
-
         engineState = CAR_ENGINE_OFF;
-
-        pwmConfig.dutyCycle = 0;
-        pwmConfig2.dutyCycle = 0;
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
 
         //Turn LED2 to RED when Car Engine State is OFF
         //GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
         //GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
 
-        currentPosition = 0;
-        rounds = 0;
-        leftRounds = 0;
         wifiState = CAR_WAITING_INSTRUCTION;
         // Go back to low power mode after handling all interrupts
         PCM_gotoLPM0();
     }
+}
 
+void getPIDOutput()
+{
+    float kp = 0.95;
+    float ki = 0.09;
+    float kd = 0.5;
+
+    float currentL = 0;
+    float currentR = 0;
+
+    float targetRPM = 120;
+
+    float minDiff = 80;
+
+    __delay_cycles(3000);
+    float errorL = targetRPM - leftRPM;
+    float errorR = targetRPM - rightRPM;
+
+    if (errorL < minDiff && errorL != 0) //We are only accumulating error when it is lower than a value i set
+    {
+        errorTl += errorL; //errorTl is the cumulative error
+    }
+    else
+    {
+        errorTl = 0;
+    }
+    if (errorR < minDiff && errorR != 0) //Error = 0 means we are at where we want to be
+    {
+        errorTr += errorR;
+    }
+    else
+    {
+        errorTr = 0;
+    }
+    if (errorTl > 50/ki) { //Cant get any higher than error 50, maybe maximum adjustment value?
+        errorTl = 50/ki;
+    }
+    if (errorTr > 50/ki)
+    {
+        errorTr = 50/ki;
+    }
+    if (errorL == 0)  //If error = 0, everything shut off, else starts accumulating again
+    {
+        derivativeL = 0;
+    }
+    if (errorR == 0)
+    {
+        derivativeR = 0;
+    }
+
+
+    /* PID CALCULATIONS*/
+    proportionL = errorL * kp;
+    proportionR = errorR * kp;
+
+    integralL = errorTl * ki; //Low value of proportion might not be enough to move robot so need integral (cumulated error)
+    integralR = errorTr * ki; //Eventually the integral value will be big enough to move the robot
+
+    derivativeL = (errorL - lastErrorL) * kd; //Rate of change of error
+    derivativeR = (errorR - lastErrorR) * kd; //To keep in check rest of the loop
+    //if we approach target really fast and error is changing quickly, means in danger of overshooting the target
+    //Used to slow us down(?), hopefully negative value so will contribute negatively to motor value
+
+    //Update last errors
+    lastErrorL = errorL;
+    lastErrorR = errorR;
+
+    //Value to be sent to the motors
+    currentL = (proportionL + integralL + derivativeL) * 10000;
+    currentR = (proportionR + integralR + derivativeR) * 10000;
+
+    //Adjust PWM
+    pwmConfig.dutyCycle = currentR;
+    pwmConfig2.dutyCycle = currentR;
+    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+}
+
+void clearCounters(void)
+{
+    Timer_A_clearTimer(TIMER_A1_BASE);
+    rightNotchesDetected = 0;
+    timeSeconds = 0;
+    leftNotchesDetected = 0;
+    leftSpeed = 0;
+    rightSpeed = 0;
+    leftRPM = 0;
+    rightRPM = 0;
+    leftError = 0;
+    rightError = 0;
+    errorTl = 0;
+    errorTr = 0;
+    lastErrorL = 0;
+    lastErrorR = 0;
+    proportionL = 0;
+    proportionR = 0;
+    integralL = 0;
+    integralR = 0;
+    derivativeL = 0;
+    derivativeR = 0;
 }
 
 /****************** Interrupt Handlers ******************/
@@ -378,52 +432,30 @@ void PORT1_IRQHandler(void)
 
 void PORT2_IRQHandler(void)
 {
-    uint32_t status; //Stores the pin that trigger the interrupt
-
+    uint32_t status;
     status = GPIO_getEnabledInterruptStatus(GPIO_PORT_P2);
 
     if (status & GPIO_PIN7)
     {
-        if (notchesDetected == 0)
-        {
-            /* Start the timer to get seconds per round for pid*/
-            roundsInterrupt = 0;
-            Timer_A_clearTimer(TIMER_A1_BASE);
-            Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
-        }
-        notchesDetected++;
-        if (notchesDetected == 20)
-        {
-            rounds++;
-            notchesDetected = 0;
-            Timer_A_stopTimer(TIMER_A1_BASE);
-            roundsInterrupt *= TICKPERIOD;
-            /* Time in microseconds per round*/
-            roundsInterrupt += Timer_A_getCounterValue(TIMER_A1_BASE);
-            Timer_A_clearTimer(TIMER_A1_BASE);
-            /* current RPM for the recorded round*/
-            cRPM = 1 / ((roundsInterrupt / 1000000.0) / 60.0);
-
-        }
+        GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN7);
+        rightNotchesDetected += 1;
     }
-    else if (status & GPIO_PIN6)
+    if (status & GPIO_PIN6)
     {
-        leftNotchesDetected++;
-        if (leftNotchesDetected == 20)
-        {
-            leftRounds++;
-            leftNotchesDetected = 0;
-        }
-    }
-    //printf("%i\n", notchesDetected);
+        GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN6);
+        leftNotchesDetected += 1;
 
-    GPIO_clearInterruptFlag(GPIO_PORT_P2, status);
+    }
+
 }
 
 void TA1_0_IRQHandler(void)
 {
     // Increment global variable (count number of interrupt occurred)
-    roundsInterrupt++;
+    timeSeconds += 1;
+    /* RPM*/
+    leftRPM = ((leftNotchesDetected/timeSeconds)/20.0)*60;
+    rightRPM = ((rightNotchesDetected/timeSeconds)/20.0)*60;
 
     // Clear interrupt flag
     Timer_A_clearCaptureCompareInterrupt(TIMER_A1_BASE, TIMER_A_CAPTURECOMPARE_REGISTER_0);
@@ -433,7 +465,7 @@ void TA1_0_IRQHandler(void)
 
 void Initialise_TimerA1()
 {
-    Timer_A_configureUpMode(TIMER_A1_BASE, &upConfig);
+    Timer_A_configureUpMode(TIMER_A1_BASE, &upConfigEncoder);
     Interrupt_enableInterrupt(INT_TA1_0);
     Timer_A_clearTimer(TIMER_A1_BASE);
 }
@@ -483,14 +515,6 @@ void Initialise_CarMotor()
 
 void Initialise_EspUART(void)
 {
-    /*Initialize required hardware peripherals for the ESP8266*/
-    /*
-     MAP_GPIO_setAsPeripheralModuleFunctionInputPin(GPIO_PORT_P1, GPIO_PIN2 | GPIO_PIN3, GPIO_PRIMARY_MODULE_FUNCTION);
-     MAP_UART_initModule(EUSCI_A0_BASE, &UART0Config);
-     MAP_UART_enableModule(EUSCI_A0_BASE);
-     MAP_UART_enableInterrupt(EUSCI_A0_BASE, EUSCI_A_UART_RECEIVE_INTERRUPT);
-     MAP_Interrupt_enableInterrupt(INT_EUSCIA0);
-     */
 
     /*Ensure MSP432 is Running at 24 MHz*/
     FlashCtl_setWaitState(FLASH_BANK0, 2);
@@ -559,6 +583,7 @@ void setWheelDirection(uint32_t dir)
 
     if (dir & CAR_WHEEL_FORWARD) //Forward
     {
+        __delay_cycles(3000);
         //Left Wheel
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN0);
@@ -569,6 +594,7 @@ void setWheelDirection(uint32_t dir)
     }
     else if (dir & CAR_WHEEL_BACKWARD) //Backward
     {
+        __delay_cycles(3000);
         //Left Wheel
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN2);
@@ -577,42 +603,29 @@ void setWheelDirection(uint32_t dir)
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
     }
-    else if (dir & CAR_WHEEL_FORWARD_RIGHT)
+    else if (dir & CAR_WHEEL_LEFT)
     {
+        __delay_cycles(3000);
         //Left Wheel
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
-        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
-
-        //Right Wheel
-        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
-        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
-    }
-    else if (dir & CAR_WHEEL_FORWARD_LEFT)
-    {
-        //Left Wheel
-        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN0);
-        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN2);
 
         //Right Wheel
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN4);
         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN5);
     }
-    else if (dir & CAR_WHEEL_BACKWARD_LEFT)
+    else if (dir & CAR_WHEEL_RIGHT)
     {
-    }
-    else if (dir & CAR_WHEEL_BACKWARD_RIGHT)
-    {
-    }
-    else
-    {
+        __delay_cycles(3000);
         //Left Wheel
-        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN0);
 
         //Right Wheel
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
-        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN4);
     }
+
 }
 
 void checkForObstacle(void)
@@ -630,20 +643,7 @@ static void Delay(uint32_t loop)
 {
     volatile uint32_t i;
 
-    for (i = 0; i < loop; i++)
-        ;
-}
-
-static void InstructionDelay(uint32_t notches)
-{
-    while (1)
-    {
-        if (notchesDetected == notches)
-        {
-            notchesDetected = 0;
-            break;
-        }
-    }
+    for (i = 0; i < loop; i++);
 }
 
 // -------------------------------------------------------------------------------------------------------------------
@@ -718,8 +718,7 @@ float getHCSR04Distance(void)
     GPIO_setOutputLowOnPin(GPIO_PORT_P3, GPIO_PIN6);
 
     /* Wait for positive-edge */
-    while (GPIO_getInputPinValue(GPIO_PORT_P3, GPIO_PIN7) == 0)
-        ;
+    while (GPIO_getInputPinValue(GPIO_PORT_P3, GPIO_PIN7) == 0);
 
     /* Start Timer */
     SR04IntTimes = 0;

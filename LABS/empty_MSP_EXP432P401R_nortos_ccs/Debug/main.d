@@ -58,6 +58,9 @@ main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdlib.h
 main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/UART_Driver.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdio.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdarg.h
+main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/math.h
+main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/_defs.h
+main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/machine/_limits.h
 
 ../main.c:
 
@@ -174,4 +177,10 @@ C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P4
 C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdio.h:
 
 C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdarg.h:
+
+C:/ti/ti-cgt-arm_20.2.4.LTS/include/math.h:
+
+C:/ti/ti-cgt-arm_20.2.4.LTS/include/_defs.h:
+
+C:/ti/ti-cgt-arm_20.2.4.LTS/include/machine/_limits.h:
 

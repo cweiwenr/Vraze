@@ -110,7 +110,7 @@ bool ESP8266_ChangeMode1(void)
     {
         return false;
     }
-    printf("%s\n", ESP8266_Buffer);
+    //printf("%s\n", ESP8266_Buffer);
     //UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
     return true;
 }
@@ -128,7 +128,7 @@ bool ESP8266_startserver(void)
     {
         return false;
     }
-    printf("%s\n", ESP8266_Buffer);
+    //printf("%s\n", ESP8266_Buffer);
     //UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
     return true;
 }
@@ -148,7 +148,7 @@ bool ESP8266_ConnectToAP(char *SSID, char *Password)
     {
         return false;
     }
-    printf("%s\n", ESP8266_Buffer);
+    //printf("%s\n", ESP8266_Buffer);
     //UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
     return true;
 }
@@ -168,7 +168,7 @@ bool ESP8266_DisconnectToAP(void)
     {
         return false;
     }
-    printf("%s\n", ESP8266_Buffer);
+    //printf("%s\n", ESP8266_Buffer);
     //UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
     return true;
 }
@@ -199,7 +199,7 @@ bool ESP8266_EnableMultipleConnections(bool Enable)
     {
         return false;
     }
-    printf("%s\n", ESP8266_Buffer);
+    //printf("%s\n", ESP8266_Buffer);
     //UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
     return true;
 }
@@ -238,7 +238,7 @@ bool ESP8266_EstablishConnection(char ID, uint8_t type, char *address, char *por
     {
         return false;
     }
-    printf("%s\n", ESP8266_Buffer);
+    //printf("%s\n", ESP8266_Buffer);
     //UART_Printf(EUSCI_A0_BASE, ESP8266_Buffer);
     return true;
 }
