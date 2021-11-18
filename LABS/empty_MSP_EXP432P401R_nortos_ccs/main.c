@@ -56,7 +56,7 @@ float integralR;
 float derivativeL;
 float derivativeR;
 
-void getPIDOutput(void);
+void getPIDOutput(uint32_t);
 
 volatile float speed = 0.0f;
 uint32_t wheelDirection = CAR_WHEEL_STOP;
@@ -205,10 +205,11 @@ void main()
                     {
                         setWheelDirection(CAR_WHEEL_FORWARD);
                         Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-                        while(rightNotchesDetected < notches)
+                        while (leftNotchesDetected < 40 && rightNotchesDetected < 40)
                         {
-                            getPIDOutput();
+                            getPIDOutput(45);
                         }
+
                         pwmConfig.dutyCycle = 0;
                         pwmConfig2.dutyCycle = 0;
                         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
@@ -226,9 +227,9 @@ void main()
                     {
                         setWheelDirection(CAR_WHEEL_BACKWARD);
                         Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-                        while(rightNotchesDetected < notches)
+                        while(leftNotchesDetected < 40 && rightNotchesDetected < 40)
                         {
-                            getPIDOutput();
+                            getPIDOutput(45);
                         }
                         pwmConfig.dutyCycle = 0;
                         pwmConfig2.dutyCycle = 0;
@@ -252,9 +253,9 @@ void main()
                         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN5);
                         //setWheelDirection(CAR_WHEEL_LEFT);
                         Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-                        while(rightNotchesDetected <= 10)
+                        while(leftNotchesDetected < 10 && rightNotchesDetected < 10)
                         {
-                            getPIDOutput();
+                            getPIDOutput(12);
                         }
                         pwmConfig.dutyCycle = 0;
                         pwmConfig2.dutyCycle = 0;
@@ -278,9 +279,9 @@ void main()
                         GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
                         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
                         //setWheelDirection(CAR_WHEEL_RIGHT);
-                        while(rightNotchesDetected <= 10)
+                        while(leftNotchesDetected < 10 && rightNotchesDetected < 10)
                         {
-                            getPIDOutput();
+                            getPIDOutput(12);
                         }
                         pwmConfig.dutyCycle = 0;
                         pwmConfig2.dutyCycle = 0;
@@ -306,32 +307,36 @@ void main()
     }
 }
 
-void getPIDOutput()
+void getPIDOutput(uint32_t targetNotch)
 {
-    float kp = 0.95;
-    float ki = 0.09;
-    float kd = 0.5;
+    float kp = 0.15;
+    float ki = 0.15;
+    float kd = 0.15;
 
     float currentL = 0;
     float currentR = 0;
 
     float targetRPM = 120;
+    float targetNotches = targetNotch;
 
-    float minDiff = 80;
+    float minDiff = 10;
 
-    __delay_cycles(3000);
-    float errorL = targetRPM - leftRPM;
-    float errorR = targetRPM - rightRPM;
+    //float errorL = targetRPM - leftRPM;
+    //float errorR = targetRPM - rightRPM;
 
-    if (errorL < minDiff && errorL != 0) //We are only accumulating error when it is lower than a value i set
+    __delay_cycles(5000);
+    float errorL = targetNotches - leftNotchesDetected;
+    float errorR = targetNotches - rightNotchesDetected;
+
+    if (errorL < minDiff && errorL != 0)
     {
-        errorTl += errorL; //errorTl is the cumulative error
+        errorTl += errorL;
     }
     else
     {
         errorTl = 0;
     }
-    if (errorR < minDiff && errorR != 0) //Error = 0 means we are at where we want to be
+    if (errorR < minDiff && errorR != 0)
     {
         errorTr += errorR;
     }
@@ -378,9 +383,10 @@ void getPIDOutput()
 
     //Adjust PWM
     pwmConfig.dutyCycle = currentR;
-    pwmConfig2.dutyCycle = currentR;
+    pwmConfig2.dutyCycle = currentL;
     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+
 }
 
 void clearCounters(void)
@@ -437,17 +443,17 @@ void PORT2_IRQHandler(void)
 
     if (status & GPIO_PIN7)
     {
-        GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN7);
         rightNotchesDetected += 1;
+        GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN7);
     }
     if (status & GPIO_PIN6)
     {
-        GPIO_clearInterruptFlag(GPIO_PORT_P1, GPIO_PIN6);
         leftNotchesDetected += 1;
-
+        GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN6);
     }
-
 }
+
+
 
 void TA1_0_IRQHandler(void)
 {
@@ -563,7 +569,8 @@ void Initialise_Encoder(void)
 {
     GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P2, GPIO_PIN6);
     GPIO_setAsInputPinWithPullUpResistor(GPIO_PORT_P2, GPIO_PIN7);
-
+    GPIO_interruptEdgeSelect(GPIO_PORT_P2, GPIO_PIN6, GPIO_LOW_TO_HIGH_TRANSITION);
+    GPIO_interruptEdgeSelect(GPIO_PORT_P2, GPIO_PIN7, GPIO_LOW_TO_HIGH_TRANSITION);
     /* Need extra 3v3, so use GPIO to supply the 3v3*/
     GPIO_setAsOutputPin(GPIO_PORT_P5, GPIO_PIN4);
     GPIO_setAsOutputPin(GPIO_PORT_P5, GPIO_PIN7);
