@@ -25,7 +25,6 @@ bool ESP8266_startserver(void);
 bool ESP8266_DisconnectToAP(void);
 
 void ESP8266_SendATCommand(char *ATcommand);
-//void ESP8266_Terminal(void);
 char *ESP8266_GetBuffer(void);
 void ESP8266_HardReset(void);
 

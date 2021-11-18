@@ -10,7 +10,10 @@ GEN_OPTS__FLAG :=
 GEN_CMDS__FLAG := 
 
 ORDERED_OBJS += \
+"./CAR_Controls.obj" \
 "./ESP8266.obj" \
+"./HCSR04.obj" \
+"./Initialise.obj" \
 "./UART_Driver.obj" \
 "./main.obj" \
 "./system_msp432p401r.obj" \
@@ -166,8 +169,8 @@ empty_MSP_EXP432P401R_nortos_ccs.hex: $(EXE_OUTPUTS)
 # Other Targets
 clean:
 	-$(RM) $(BIN_OUTPUTS__QUOTED)$(EXE_OUTPUTS__QUOTED)
-	-$(RM) "ESP8266.obj" "UART_Driver.obj" "main.obj" "system_msp432p401r.obj" "ccs\startup_msp432p401r_ccs.obj" 
-	-$(RM) "ESP8266.d" "UART_Driver.d" "main.d" "system_msp432p401r.d" "ccs\startup_msp432p401r_ccs.d" 
+	-$(RM) "CAR_Controls.obj" "ESP8266.obj" "HCSR04.obj" "Initialise.obj" "UART_Driver.obj" "main.obj" "system_msp432p401r.obj" "ccs\startup_msp432p401r_ccs.obj" 
+	-$(RM) "CAR_Controls.d" "ESP8266.d" "HCSR04.d" "Initialise.d" "UART_Driver.d" "main.d" "system_msp432p401r.d" "ccs\startup_msp432p401r_ccs.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

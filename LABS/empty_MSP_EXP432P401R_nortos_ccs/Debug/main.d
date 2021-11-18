@@ -1,6 +1,7 @@
 # FIXED
 
 main.obj: ../main.c
+main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/main.h
 main.obj: C:/ti/simplelink_msp432p4_sdk_3_40_01_02/source/ti/devices/msp432p4xx/driverlib/driverlib.h
 main.obj: C:/ti/simplelink_msp432p4_sdk_3_40_01_02/source/ti/devices/msp432p4xx/driverlib/adc14.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdint.h
@@ -61,8 +62,12 @@ main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/stdarg.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/math.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/_defs.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/machine/_limits.h
+main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/Initialise.h
+main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/CAR_Controls.h
 
 ../main.c:
+
+C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/main.h:
 
 C:/ti/simplelink_msp432p4_sdk_3_40_01_02/source/ti/devices/msp432p4xx/driverlib/driverlib.h:
 
@@ -183,4 +188,8 @@ C:/ti/ti-cgt-arm_20.2.4.LTS/include/math.h:
 C:/ti/ti-cgt-arm_20.2.4.LTS/include/_defs.h:
 
 C:/ti/ti-cgt-arm_20.2.4.LTS/include/machine/_limits.h:
+
+C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/Initialise.h:
+
+C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/CAR_Controls.h:
 
