@@ -4,7 +4,7 @@
 #include <math.h>
 #include <Initialise.h>
 #include <CAR_Controls.h>
-
+#include <HCSR04.h>
 /*
  * Macro Definitions
 */
@@ -16,9 +16,6 @@
 #define CAR_ENGINE_ON               0x1
 #define CAR_ENGINE_OFF              0x0
 
-/* Other Macros*/
-#define MIN_DISTANCE                15.0f
-#define TICKPERIOD                  1000
 // -------------------------------------------------------------------------------------------------------------------/
 /******************************************************************************
  * main.h function prototypes
@@ -27,14 +24,9 @@
  * clearCounters            - Reset global variable and counters for next PID's loop
  * moveCar                  - Calls getPID to generate pwm to move car
  *******************************************************************************/
-void getPIDOutput(uint32_t);
+void getPIDOutput(uint32_t targetNotch, char dir);
 void clearCounters(void);
 void moveCar(char dir);
-void checkForObstacle(void);
-static void Delay(uint32_t loop);
-void Initalise_HCSR04(void);
-static uint32_t getHCSR04Time(void);
-float getHCSR04Distance(void);
 // -------------------------------------------------------------------------------------------------------------------/
 /******************************************************************************
  * Global Variables
@@ -93,7 +85,3 @@ float integralL;
 float integralR;
 float derivativeL;
 float derivativeR;
-
-uint32_t SR04IntTimes;
-
-

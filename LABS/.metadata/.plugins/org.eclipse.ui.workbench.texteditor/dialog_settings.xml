@@ -1,17 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <section name="Workbench">
 	<section name="org.eclipse.ui.texteditor.FindReplaceDialog">
-		<item key="selection" value="upConfig"/>
+		<item key="selection" value="delay"/>
 		<item key="wrap" value="true"/>
 		<item key="casesensitive" value="false"/>
 		<item key="wholeword" value="false"/>
 		<item key="incremental" value="false"/>
 		<item key="isRegEx" value="false"/>
 		<list key="findhistory">
+			<item value="Delay"/>
+			<item value="TIMER_A0_BASE"/>
+			<item value="getCollision"/>
 			<item value="upConfig"/>
 			<item value="Initialise_TimerA1"/>
 			<item value="speed"/>
-			<item value="Delay"/>
 			<item value="PORT_P2"/>
 			<item value="PORT2_IRQ"/>
 			<item value="INT_PORT2"/>

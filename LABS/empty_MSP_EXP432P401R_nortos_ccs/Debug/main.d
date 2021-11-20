@@ -64,6 +64,7 @@ main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/_defs.h
 main.obj: C:/ti/ti-cgt-arm_20.2.4.LTS/include/machine/_limits.h
 main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/Initialise.h
 main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/CAR_Controls.h
+main.obj: C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/HCSR04.h
 
 ../main.c:
 
@@ -192,4 +193,6 @@ C:/ti/ti-cgt-arm_20.2.4.LTS/include/machine/_limits.h:
 C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/Initialise.h:
 
 C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/CAR_Controls.h:
+
+C:/Users/rcwww/Desktop/Y2T1/2104/Project/ict2104_carProj/LABS/empty_MSP_EXP432P401R_nortos_ccs/HCSR04.h:
 

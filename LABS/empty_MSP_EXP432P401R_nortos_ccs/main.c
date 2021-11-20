@@ -1,5 +1,7 @@
 #include <main.h>
-
+#define MIN_DISTANCE 15.0f
+#define TICKPERIOD      1000
+uint32_t SR04IntTimes;
 /******************************************************************************
  * PWM and Timer Configurations
  *
@@ -10,7 +12,7 @@
 Timer_A_PWMConfig pwmConfig =
 {
     TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source 24MHz
-    TIMER_A_CLOCKSOURCE_DIVIDER_1,          // SMCLK/1 = 24MHz
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,          // SMCLK/1 = 3MHz
     10000,                                  // Period = 10000
     TIMER_A_CAPTURECOMPARE_REGISTER_1,
     TIMER_A_OUTPUTMODE_RESET_SET,
@@ -27,13 +29,16 @@ Timer_A_PWMConfig pwmConfig2 =
     0
 };
 
-// -------------------------------------------------------------------------------------------------------------------/
+// -------------------------------------------------------------------------------------------------------------------
+
 void main()
 {
     /* Stop Watchdog Timer */
     MAP_WDT_A_holdTimer();
 
-    /* Initialize Board*/
+    /* Master CLK frequency*/
+    CS_setDCOCenteredFrequency(CS_DCO_FREQUENCY_24);
+
     engineState = CAR_ENGINE_OFF;
     Initialise_IO();
     Initialise_CarMotor();
@@ -44,11 +49,12 @@ void main()
     enableInterrupts();
 
     /* Ready Green LED*/
-    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN1);
+    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN0);
 
     /* Program's loop */
     while (1)
     {
+
         /* Fill up ESP8266 buffer before processing data*/
         while (ESP8266_WaitForAnswer(200))
         {
@@ -95,6 +101,8 @@ void main()
     }
 }
 
+// -------------------------------------------------------------------------------------------------------------------
+
 void moveCar(char dir)
 {
     if(dir == 'F')
@@ -112,7 +120,7 @@ void moveCar(char dir)
     else if (dir == 'R')
     {
         desiredNotches = 10;
-        PIDDesiredNotches = 12;
+        PIDDesiredNotches = 10;
         //setWheelDirection(CAR_WHEEL_RIGHT);
 
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
@@ -123,7 +131,7 @@ void moveCar(char dir)
     else if (dir == 'L')
     {
         desiredNotches = 10;
-        PIDDesiredNotches = 12;
+        PIDDesiredNotches = 10;
         //setWheelDirection(CAR_WHEEL_LEFT);
 
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
@@ -138,96 +146,119 @@ void moveCar(char dir)
     {
         /* Start timer for RPM/ speed calculations, then call PID contoller to generate PWM*/
         Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-        while(leftNotchesDetected < desiredNotches && rightNotchesDetected < desiredNotches)
+        /*
+        while(rightNotchesDetected < desiredNotches && leftNotchesDetected < desiredNotches)
         {
-            getPIDOutput(PIDDesiredNotches);
+            getPIDOutput(PIDDesiredNotches, dir);
         }
+        */
+        getPIDOutput(desiredNotches, dir);
         /* Make sure wheel stops moving after reaching desired*/
-        pwmConfig.dutyCycle = 0;
-        pwmConfig2.dutyCycle = 0;
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-        Timer_A_stopTimer(TIMER_A1_BASE);
-        clearCounters();
+        //pwmConfig.dutyCycle = 0;
+        //pwmConfig2.dutyCycle = 0;
+        //Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+        //Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+        //Timer_A_stopTimer(TIMER_A1_BASE);
+        //clearCounters();
     }
     GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN1);
 }
 
+// -------------------------------------------------------------------------------------------------------------------
 
-void getPIDOutput(uint32_t targetNotch)
+void getPIDOutput(uint32_t targetNotch, char dir)
 {
     float kp = 0.14;
-    float ki = 0.2;
+    float ki = 0.04;
     float kd = 0.05;
 
     float currentL = 0;
     float currentR = 0;
-
-    float targetRPM = 120;
+    //float errorR;
     float targetNotches = targetNotch;
 
     float minDiff = 10;
 
+    do
+    {
+        __delay_cycles(5000);
+
+        float errorL = targetNotches - leftNotchesDetected;
+        float errorR = targetNotches - rightNotchesDetected;
+
+        /* Even aft fine tuning PID, the wheels are uneven
+        if (dir == 'F' || dir == 'B')
+            errorR = targetNotches - rightNotchesDetected - 8;
+        else if (dir == 'R' || dir == 'L')
+            errorR = targetNotches - rightNotchesDetected;*/
+
+        if (errorL < minDiff && errorL != 0)
+        {
+            errorTl += errorL;
+        }
+        else
+        {
+            errorTl = 0;
+        }
+        if (errorR < minDiff && errorR != 0)
+        {
+            errorTr += errorR;
+        }
+        else
+        {
+            errorTr = 0;
+        }
+        if (errorTl > 50/ki)
+        {
+            errorTl = 50/ki;
+        }
+        if (errorTr > 50/ki)
+        {
+            errorTr = 50/ki;
+        }
+        if (errorL == 0)
+        {
+            derivativeL = 0;
+        }
+        if (errorR == 0)
+        {
+            derivativeR = 0;
+        }
+
+        /* PID CALCULATIONS*/
+        proportionL = errorL * kp;
+        proportionR = errorR * kp;
+
+        integralL = errorTl * ki;
+        integralR = errorTr * ki;
+
+        derivativeL = (errorL - lastErrorL) * kd;
+        derivativeR = (errorR - lastErrorR) * kd;
+
+        /* Update last errors*/
+        lastErrorL = errorL;
+        lastErrorR = errorR;
+
+        /* Value to be sent to the motors*/
+        currentR = (proportionR + integralR + derivativeR) * 10000;
+        currentL = (proportionL + integralL + derivativeL) * 10000;
+
+        /* Adjust PWM*/
+        pwmConfig.dutyCycle = currentR;
+        pwmConfig2.dutyCycle = currentL;
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    } while (proportionL > 0 && proportionR > 0);
     __delay_cycles(5000);
-    float errorL = targetNotches - leftNotchesDetected;
-    float errorR = targetNotches - rightNotchesDetected;
-
-    if (errorL < minDiff && errorL != 0)
-    {
-        errorTl += errorL;
-    }
-    else
-    {
-        errorTl = 0;
-    }
-    if (errorR < minDiff && errorR != 0)
-    {
-        errorTr += errorR;
-    }
-    else
-    {
-        errorTr = 0;
-    }
-    if (errorTl > 50/ki) { //Cant get any higher than error 50, maybe maximum adjustment value?
-        errorTl = 50/ki;
-    }
-    if (errorTr > 50/ki)
-    {
-        errorTr = 50/ki;
-    }
-    if (errorL == 0)  //If error = 0, everything shut off, else starts accumulating again
-    {
-        derivativeL = 0;
-    }
-    if (errorR == 0)
-    {
-        derivativeR = 0;
-    }
-
-    /* PID CALCULATIONS*/
-    proportionL = errorL * kp;
-    proportionR = errorR * kp;
-
-    integralL = errorTl * ki;
-    integralR = errorTr * ki;
-
-    derivativeL = (errorL - lastErrorL) * kd;
-    derivativeR = (errorR - lastErrorR) * kd;
-
-    /* Update last errors*/
-    lastErrorL = errorL;
-    lastErrorR = errorR;
-
-    /* Value to be sent to the motors*/
-    currentL = (proportionL + integralL + derivativeL) * 10000;
-    currentR = (proportionR + integralR + derivativeR) * 10000;
-
-    /* Adjust PWM*/
-    pwmConfig.dutyCycle = currentR;
-    pwmConfig2.dutyCycle = currentL;
+    pwmConfig.dutyCycle = 0;
+    pwmConfig2.dutyCycle = 0;
     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    Timer_A_stopTimer(TIMER_A1_BASE);
+    clearCounters();
 }
+
+// -------------------------------------------------------------------------------------------------------------------
 
 void clearCounters(void)
 {
@@ -253,6 +284,8 @@ void clearCounters(void)
     derivativeR = 0;
 }
 
+// -------------------------------------------------------------------------------------------------------------------
+
 /* Interrupt Handlers */
 void PORT1_IRQHandler(void)
 {
@@ -276,6 +309,8 @@ void PORT1_IRQHandler(void)
     }
 }
 
+// -------------------------------------------------------------------------------------------------------------------
+
 void PORT2_IRQHandler(void)
 {
     uint32_t status;
@@ -293,6 +328,8 @@ void PORT2_IRQHandler(void)
     }
 }
 
+// -------------------------------------------------------------------------------------------------------------------
+
 void TA1_0_IRQHandler(void)
 {
     /* Increment global variable (count number of interrupt occurred)*/
@@ -305,5 +342,3 @@ void TA1_0_IRQHandler(void)
     /* Clear interrupt flag*/
     Timer_A_clearCaptureCompareInterrupt(TIMER_A1_BASE, TIMER_A_CAPTURECOMPARE_REGISTER_0);
 }
-
-
