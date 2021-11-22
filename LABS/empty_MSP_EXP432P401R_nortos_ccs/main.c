@@ -84,6 +84,7 @@ void main()
             /* Iterate through each character and process it*/
             for (i; temp[i]; i++)
             {
+                __delay_cycles(30000);
                 c = temp[i];
                 if (c == 'F')
                     moveCar(c);
@@ -108,19 +109,16 @@ void moveCar(char dir)
     if(dir == 'F')
     {
         desiredNotches = 40;
-        PIDDesiredNotches = 45;
         setWheelDirection(CAR_WHEEL_FORWARD);
     }
     else if (dir == 'B')
     {
         desiredNotches = 40;
-        PIDDesiredNotches = 45;
         setWheelDirection(CAR_WHEEL_BACKWARD);
     }
     else if (dir == 'R')
     {
         desiredNotches = 10;
-        PIDDesiredNotches = 10;
         //setWheelDirection(CAR_WHEEL_RIGHT);
 
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
@@ -131,7 +129,6 @@ void moveCar(char dir)
     else if (dir == 'L')
     {
         desiredNotches = 10;
-        PIDDesiredNotches = 10;
         //setWheelDirection(CAR_WHEEL_LEFT);
 
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
@@ -146,12 +143,12 @@ void moveCar(char dir)
     {
         /* Start timer for RPM/ speed calculations, then call PID contoller to generate PWM*/
         Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-        /*
+/*
         while(rightNotchesDetected < desiredNotches && leftNotchesDetected < desiredNotches)
         {
-            getPIDOutput(PIDDesiredNotches, dir);
+            getPIDOutput(desiredNotches, dir);
         }
-        */
+*/
         getPIDOutput(desiredNotches, dir);
         /* Make sure wheel stops moving after reaching desired*/
         //pwmConfig.dutyCycle = 0;
@@ -168,29 +165,20 @@ void moveCar(char dir)
 
 void getPIDOutput(uint32_t targetNotch, char dir)
 {
-    float kp = 0.14;
-    float ki = 0.04;
-    float kd = 0.05;
+    float kp = 0.28;
+    float ki = 0.09;
+    float kd = 0.15;
 
     float currentL = 0;
     float currentR = 0;
-    //float errorR;
-    float targetNotches = targetNotch;
 
-    float minDiff = 10;
+    float minDiff = 0;
 
     do
     {
         __delay_cycles(5000);
-
-        float errorL = targetNotches - leftNotchesDetected;
-        float errorR = targetNotches - rightNotchesDetected;
-
-        /* Even aft fine tuning PID, the wheels are uneven
-        if (dir == 'F' || dir == 'B')
-            errorR = targetNotches - rightNotchesDetected - 8;
-        else if (dir == 'R' || dir == 'L')
-            errorR = targetNotches - rightNotchesDetected;*/
+        float errorL = targetNotch - leftNotchesDetected;
+        float errorR = targetNotch - rightNotchesDetected;
 
         if (errorL < minDiff && errorL != 0)
         {
@@ -240,20 +228,21 @@ void getPIDOutput(uint32_t targetNotch, char dir)
         lastErrorR = errorR;
 
         /* Value to be sent to the motors*/
-        currentR = (proportionR + integralR + derivativeR) * 10000;
-        currentL = (proportionL + integralL + derivativeL) * 10000;
+        currentR = (proportionR + integralR + derivativeR) * 5000;
+        currentL = (proportionL + integralL + derivativeL) * 5000;
 
         /* Adjust PWM*/
         pwmConfig.dutyCycle = currentR;
         pwmConfig2.dutyCycle = currentL;
         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-    } while (proportionL > 0 && proportionR > 0);
+    } while (leftNotchesDetected < targetNotch || rightNotchesDetected < targetNotch);
+
     __delay_cycles(5000);
     pwmConfig.dutyCycle = 0;
     pwmConfig2.dutyCycle = 0;
-    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
     Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
     Timer_A_stopTimer(TIMER_A1_BASE);
     clearCounters();
 }
