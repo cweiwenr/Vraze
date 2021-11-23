@@ -8,7 +8,7 @@ class Program
         {
             // change ip to ur com's private ip
             //Server myserver = new Server("192.168.157.22", 5000);
-            Server myserver = new Server("172.20.10.2", 5000);
+            Server myserver = new Server("192.168.86.81", 8080);
         
         });
         t.Start();
