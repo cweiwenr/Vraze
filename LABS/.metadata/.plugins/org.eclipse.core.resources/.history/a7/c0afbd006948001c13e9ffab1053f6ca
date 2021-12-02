@@ -1,7 +1,0 @@
-#define MIN_DISTANCE 15.0f
-
-void Initalise_HCSR04(void);
-static uint32_t getHCSR04Time(void);
-float getHCSR04Distance(void);
-static void Delay(uint32_t loop);
-bool getCollision(void)

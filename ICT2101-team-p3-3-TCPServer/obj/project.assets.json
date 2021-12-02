@@ -13,11 +13,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2101\\Project\\TCPServer\\ICT2101-team-p3-3-TCPServer\\ICT2101-team-p3-3.csproj",
+      "projectUniqueName": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2104\\Project\\ict2104_carProj\\ICT2101-team-p3-3-TCPServer\\ICT2101-team-p3-3.csproj",
       "projectName": "ICT2101-team-p3-3",
-      "projectPath": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2101\\Project\\TCPServer\\ICT2101-team-p3-3-TCPServer\\ICT2101-team-p3-3.csproj",
+      "projectPath": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2104\\Project\\ict2104_carProj\\ICT2101-team-p3-3-TCPServer\\ICT2101-team-p3-3.csproj",
       "packagesPath": "C:\\Users\\rcwww\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2101\\Project\\TCPServer\\ICT2101-team-p3-3-TCPServer\\obj\\",
+      "outputPath": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2104\\Project\\ict2104_carProj\\ICT2101-team-p3-3-TCPServer\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\rcwww\\AppData\\Roaming\\NuGet\\NuGet.Config",

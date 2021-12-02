@@ -1,0 +1,11 @@
+/* DriverLib Includes */
+#include <ti/devices/msp432p4xx/driverlib/driverlib.h>
+
+#define MIN_DISTANCE    30.0f
+#define TICKPERIOD      1000
+
+uint32_t SR04IntTimes;
+void Initalise_HCSR04(void);
+void TA0_0_IRQHandler(void);
+static uint32_t getHCSR04Time(void);
+float getHCSR04Distance(void);

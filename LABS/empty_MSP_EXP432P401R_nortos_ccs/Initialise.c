@@ -96,7 +96,7 @@ void Initialise_EspUART(void)
     //ESP8266_ConnectToAP("CHONG_Fam","ibeeciejie");
     //__delay_cycles(48000000);
 
-    if(ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "5000"))
+    if(ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "8080"))
         GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN2);
     //ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "5000");
 

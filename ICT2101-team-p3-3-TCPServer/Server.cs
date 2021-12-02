@@ -86,12 +86,13 @@ class Server
                     {
                         Console.WriteLine($"Client #{c.ThreadId}\tCar: {c.IsCar}");
                     }
-
-                if (data == "client")
+                if (data.Contains("client")) //data == "client")
                 {
                     currentClient.IsCar = true;
-                    var serverMsg = Encoding.ASCII.GetBytes("hello");
-                    //stream.Write(serverMsg, 0, serverMsg.Length);
+                    var serverMsg = Encoding.ASCII.GetBytes("Hello");
+
+                    Console.WriteLine($"Current Client Car Status: {currentClient.IsCar}");
+                    stream.Write(serverMsg, 0, serverMsg.Length);
                 }
                 else if (data[0] == 'W') // Received from the Web Portal to be SENT to the Car
                 {
@@ -121,7 +122,7 @@ class Server
                             string carStatistic = data.Substring(1, i - 1);
 
                             // Send the Car Statistics over Http GET
-                            string updateCarStatApi = $"http://localhost:5001/Car/Update?{carStatistic}";
+                            string updateCarStatApi = $"http://localhost:46381/Car/Update?{carStatistic}";
                             var responseString = httpClient.GetAsync(updateCarStatApi).ConfigureAwait(false);
                         }
                     }

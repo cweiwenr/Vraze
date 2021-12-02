@@ -1,7 +1,4 @@
 #include <main.h>
-#define MIN_DISTANCE 15.0f
-#define TICKPERIOD      1000
-uint32_t SR04IntTimes;
 /******************************************************************************
  * PWM and Timer Configurations
  *
@@ -43,11 +40,13 @@ void main()
     Initialise_IO();
     Initialise_CarMotor();
     Initialise_Encoder();
-    //Initalise_HCSR04();
     Initialise_TimerA1();
     Initialise_EspUART();
+    Initalise_HCSR04();
     enableInterrupts();
-
+    char dataSend[] = "client\r\n\r\n";
+    uint32_t t = sizeof(dataSend) - 1;
+    ESP8266_SendData(dataSend, t);
     /* Ready Green LED*/
     GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN0);
 
@@ -81,23 +80,44 @@ void main()
             strcpy(temp, instructionBuffer);
             uint16_t str_len = strlen(temp);
 
-            /* Iterate through each character and process it*/
-            for (i; temp[i]; i++)
+            if (strstr(temp, "Hello") != NULL)
             {
-                __delay_cycles(30000);
-                c = temp[i];
-                if (c == 'F')
-                    moveCar(c);
-                else if (c == 'B')
-                    moveCar(c);
-                else if (c == 'R')
-                    moveCar(c);
-                else if (c == 'L')
-                    moveCar(c);
+                char dataSend[] = "client\r\n\r\n";
+                uint32_t t = sizeof(dataSend) - 1;
+                ESP8266_SendData(dataSend, t);
+            }
+            /* Iterate through each character and process it*/
+            else
+            {
+                for (i; temp[i]; i++)
+                {
+                    __delay_cycles(30000);
+
+                    if((getHCSR04Distance() < MIN_DISTANCE))
+                    {
+                        /* Send data to web portal*/
+                        engineState = CAR_ENGINE_OFF;
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P1, GPIO_PIN0);
+                        break;
+
+                    }
+
+                    __delay_cycles(30000);
+                    c = temp[i];
+                    if (c == 'F')
+                        moveCar(c);
+                    else if (c == 'B')
+                        moveCar(c);
+                    else if (c == 'R')
+                        moveCar(c);
+                    else if (c == 'L')
+                        moveCar(c);
+                }
             }
         }
         engineState = CAR_ENGINE_OFF;
         wifiState = CAR_WAITING_INSTRUCTION;
+        GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
         PCM_gotoLPM0();
     }
 }
@@ -118,7 +138,7 @@ void moveCar(char dir)
     }
     else if (dir == 'R')
     {
-        desiredNotches = 10;
+        desiredNotches = 9;
         //setWheelDirection(CAR_WHEEL_RIGHT);
 
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
@@ -128,7 +148,7 @@ void moveCar(char dir)
     }
     else if (dir == 'L')
     {
-        desiredNotches = 10;
+        desiredNotches = 9;
         //setWheelDirection(CAR_WHEEL_LEFT);
 
         GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
@@ -142,14 +162,25 @@ void moveCar(char dir)
     if (engineState == CAR_ENGINE_ON)
     {
         /* Start timer for RPM/ speed calculations, then call PID contoller to generate PWM*/
-        Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-/*
-        while(rightNotchesDetected < desiredNotches && leftNotchesDetected < desiredNotches)
+        //Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
+        //Timer_A_stopTimer(TIMER_A1_BASE);
+        clearCounters();
+        if (dir == 'L' || dir == 'R')
+        {
+            turnCar(desiredNotches);
+        }
+        else if (dir == 'F' || dir == 'B')
         {
             getPIDOutput(desiredNotches, dir);
         }
-*/
-        getPIDOutput(desiredNotches, dir);
+/*
+        while(rightNotchesDetected < desiredNotches || leftNotchesDetected < desiredNotches)
+        {
+            getPIDOutput(desiredNotches, dir);
+        }
+*/      //Timer_A_stopTimer(TIMER_A1_BASE);
+        //clearCounters();
+
         /* Make sure wheel stops moving after reaching desired*/
         //pwmConfig.dutyCycle = 0;
         //pwmConfig2.dutyCycle = 0;
@@ -163,11 +194,26 @@ void moveCar(char dir)
 
 // -------------------------------------------------------------------------------------------------------------------
 
+void turnCar(uint32_t targetNotch)
+{
+    while(rightNotchesDetected < targetNotch && leftNotchesDetected < targetNotch)
+    {
+        __delay_cycles(5000);
+        pwmConfig.dutyCycle = 8000;
+        pwmConfig2.dutyCycle = 8000;
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    }
+    stopCar();
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
 void getPIDOutput(uint32_t targetNotch, char dir)
 {
-    float kp = 0.28;
-    float ki = 0.09;
-    float kd = 0.15;
+    float kp = 0.12;
+    float ki = 0.08;
+    float kd = 0.06;
 
     float currentL = 0;
     float currentR = 0;
@@ -177,6 +223,7 @@ void getPIDOutput(uint32_t targetNotch, char dir)
     do
     {
         __delay_cycles(5000);
+
         float errorL = targetNotch - leftNotchesDetected;
         float errorR = targetNotch - rightNotchesDetected;
 
@@ -228,8 +275,8 @@ void getPIDOutput(uint32_t targetNotch, char dir)
         lastErrorR = errorR;
 
         /* Value to be sent to the motors*/
-        currentR = (proportionR + integralR + derivativeR) * 5000;
-        currentL = (proportionL + integralL + derivativeL) * 5000;
+        currentR = (proportionR + integralR + derivativeR) * 10000;
+        currentL = (proportionL + integralL + derivativeL) * 10000;
 
         /* Adjust PWM*/
         pwmConfig.dutyCycle = currentR;
@@ -237,7 +284,13 @@ void getPIDOutput(uint32_t targetNotch, char dir)
         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
         Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
     } while (leftNotchesDetected < targetNotch || rightNotchesDetected < targetNotch);
+    stopCar();
+}
 
+// -------------------------------------------------------------------------------------------------------------------
+
+void stopCar(void)
+{
     __delay_cycles(5000);
     pwmConfig.dutyCycle = 0;
     pwmConfig2.dutyCycle = 0;
