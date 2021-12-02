@@ -44,9 +44,12 @@ void main()
     Initialise_EspUART();
     Initalise_HCSR04();
     enableInterrupts();
+
+    /* Let TCP Serve know this connection is from car*/
     char dataSend[] = "client\r\n\r\n";
     uint32_t t = sizeof(dataSend) - 1;
     ESP8266_SendData(dataSend, t);
+
     /* Ready Green LED*/
     GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN0);
 
@@ -162,8 +165,6 @@ void moveCar(char dir)
     if (engineState == CAR_ENGINE_ON)
     {
         /* Start timer for RPM/ speed calculations, then call PID contoller to generate PWM*/
-        //Timer_A_startCounter(TIMER_A1_BASE,TIMER_A_UP_MODE);
-        //Timer_A_stopTimer(TIMER_A1_BASE);
         clearCounters();
         if (dir == 'L' || dir == 'R')
         {
@@ -173,21 +174,6 @@ void moveCar(char dir)
         {
             getPIDOutput(desiredNotches, dir);
         }
-/*
-        while(rightNotchesDetected < desiredNotches || leftNotchesDetected < desiredNotches)
-        {
-            getPIDOutput(desiredNotches, dir);
-        }
-*/      //Timer_A_stopTimer(TIMER_A1_BASE);
-        //clearCounters();
-
-        /* Make sure wheel stops moving after reaching desired*/
-        //pwmConfig.dutyCycle = 0;
-        //pwmConfig2.dutyCycle = 0;
-        //Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
-        //Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
-        //Timer_A_stopTimer(TIMER_A1_BASE);
-        //clearCounters();
     }
     GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN1);
 }
@@ -324,31 +310,6 @@ void clearCounters(void)
     integralR = 0;
     derivativeL = 0;
     derivativeR = 0;
-}
-
-// -------------------------------------------------------------------------------------------------------------------
-
-/* Interrupt Handlers */
-void PORT1_IRQHandler(void)
-{
-    uint32_t status_for_switch1;
-
-    status_for_switch1 = MAP_GPIO_getInterruptStatus(GPIO_PORT_P1, GPIO_PIN1); //get status of switch 1's interrupt flag
-
-    if (status_for_switch1 & GPIO_PIN1) //Switch 1 (P1.1) On/Off Car Engine
-    {
-        // Placeholder interrupt to handle and send data, can be a function for when esp wants to send data, but
-        // if msp is in low pwr mode then need interrupt first, probs need to call the func in the interrupt
-        // or just apply send logic to that interrupt
-        char dataSend[] = "debo\r\n\r\n";
-        uint32_t t = sizeof(dataSend) - 1;
-        ESP8266_SendData(dataSend, t);
-
-        MAP_GPIO_toggleOutputOnPin(GPIO_PORT_P1, GPIO_PIN0);
-
-        MAP_GPIO_clearInterruptFlag(GPIO_PORT_P1, status_for_switch1);
-
-    }
 }
 
 // -------------------------------------------------------------------------------------------------------------------

@@ -24,8 +24,8 @@
  * getPIDOutput             - Implementation of PID controller to control DC motor's PWM
  * clearCounters            - Reset global variable and counters for next PID's loop
  * moveCar                  - Calls getPID to generate pwm to move car
- * stopCar
- * turnCar
+ * stopCar                  - If collision detected after each character instruction, off the car's engine
+ * turnCar                  - instead of using pid to turn car, because of limitations, we just turn it normally using notches
  *******************************************************************************/
 void getPIDOutput(uint32_t targetNotch, char dir);
 void clearCounters(void);
