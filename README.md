@@ -1,3 +1,10 @@
+# File Structure in repository
++ LABS contain the code composer workspace where the code of the car resides in
+    - Code file paths, LABS\empty_MSP_EXP432P401R_nortos_ccs
++ ICT2101-team-p3-3-TCPServer folder houses the multithreaded TCP server
+    - To run, ensure that you have the dotnet framework installed
+    - Run using 'dotnet watch run'
+
 # Project architecture
 ![architecture](https://res.cloudinary.com/dc6eqgbc0/image/upload/v1638492773/Architecture_Diagram_wsdfcc.png)
 
