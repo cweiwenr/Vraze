@@ -92,13 +92,15 @@ void Initialise_EspUART(void)
     /* Configure to ESP8266's connection*/
     ESP8266_ChangeMode1();
     //ESP8266_DisconnectToAP();
-    //ESP8266_ConnectToAP("Reuben","lol12345678");
-    //ESP8266_ConnectToAP("CHONG_Fam","ibeeciejie");
-    //__delay_cycles(48000000);
+    ESP8266_ConnectToAP("Reuben","lol12345678");
+    __delay_cycles(48000000);
+    /* For testing of wifi module using home private ip*/
+    //if(ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "8080"))
+    //    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN2);
+    /* Actual deployment using phone's 5g private ip*/
 
-    if(ESP8266_EstablishConnection('0', TCP, "192.168.157.22", "8080"))
+    if(ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "8080"))
         GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN2);
-    //ESP8266_EstablishConnection('0', TCP, "172.20.10.2", "5000");
 
 }
 
