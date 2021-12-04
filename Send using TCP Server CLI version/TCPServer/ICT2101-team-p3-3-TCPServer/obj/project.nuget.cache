@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "8Wo/8YN85qyzNoc361pACn28hOL5VWt8bDWNB6yUBfoRtHSNgg1I9jmeWQKeKG9D2caEDTbIRceuXW1k5evWHw==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2101\\Project\\TCPServer\\ICT2101-team-p3-3-TCPServer\\ICT2101-team-p3-3.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\rcwww\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\3.1.21\\microsoft.netcore.app.host.win-x64.3.1.21.nupkg.sha512"
+  ],
+  "logs": []
+}

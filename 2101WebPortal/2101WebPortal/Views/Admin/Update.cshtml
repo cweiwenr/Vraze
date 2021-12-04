@@ -1,0 +1,109 @@
+﻿@model Vraze.Models.Facilitator
+@{
+    ViewData["Title"] = "Create New Facilitator";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Add New Challenge</h1>
+</div>
+<div class="col-lg-8 mx-auto mt-3">
+    <div class="card">
+        <div class="card-body">
+            <h2>Facilitator Account Information</h2>
+            <form>
+                <div class="form-group row">
+                    <label class="col-md-3 form-label">Username</label>
+                    <div class="col-sm-9">
+                        <input asp-for="Username" type="text" class="form-control" id="tbUsername" value="@Model.Username" required>
+                        <div id="tbUsernameFeedback" class="custom-feedback-msg"></div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-md-3 form-label">Password</label>
+                    <div class="col-sm-9">
+                        <input asp-for="PasswordHash" type="text" class="form-control" id="tbPassword" required>
+                        <div id="tbPasswordFeedback" class="custom-feedback-msg"></div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <div class="col-md-6">
+                        <a asp-action="Manage" asp-controller="Admin" id="btnBack" class="btn btn-secondary btn-block">Back</a>
+                    </div>
+                    <div class="col-md-6">
+                        <button id="btnSubmit" class="btn btn-primary btn-block">Update</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>$(document).ready(function () {
+        function ValidateForm()
+        {
+            var valid = true;
+
+            var username = $("#tbUsername").val();
+            var password = $("#tbPassword").val();
+
+            //Resets all feedback messages
+            $(".custom-feedback-msg").text("");
+            $(".custom-feedback-msg").removeClass("invalid-feedback");
+
+            if (username === "")
+            {
+                $("#tbUsername").addClass("is-invalid");
+                $("#tbUsernameFeedback").addClass("invalid-feedback");
+                $("#tbUsernameFeedback").text("Please do not leave this blank.");
+
+                valid &= false;
+            }
+            else {
+                valid &= true;
+                $("#tbUsername").removeClass("is-invalid");
+            }
+
+            if (password === "") {
+                $("#tbPassword").addClass("is-invalid");
+                $("#tbPasswordFeedback").addClass("invalid-feedback");
+                $("#tbPasswordFeedback").text("Please do not leave this blank.");
+
+                valid &= false;
+            }
+            else {
+                valid &= true;
+                $("#tbPassword").removeClass("is-invalid");
+            }
+
+            return valid;
+        }
+
+        function SubmitForm()
+        {
+            var username = $("#tbUsername").val();
+            var password = $("#tbPassword").val();
+
+            if (ValidateForm())
+            {
+                function WebFormData(username, password) {
+                    this.Username = username;
+                    this.PasswordHash = password;
+                }
+                var webFormData = new WebFormData(username, password);
+
+                var webFormDataInString = JSON.stringify(webFormData);
+
+                $.ajax({
+                    url: "/admin/update/@Model.FacilitatorId",
+                    type: "POST",
+                    dataType: "json",
+                    contentType: "application/json",
+                    data: webFormDataInString,
+                    success: function (response) {
+                        location.replace('/Admin/Manage');
+                    },
+                    error: function (error) { console.log(error); }
+                });
+            }
+        }
+    });</script>

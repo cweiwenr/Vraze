@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "+LNuu8i8Uq9hsYpdmwPIlk8b4jlgFv78yVD2x6a6n42P0tK0eB79PXSYPRvVvwbZ3LtBSW2wYWPWzTIHD7Rn6Q==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\rcwww\\Desktop\\Y2T1\\2104\\Project\\ict2104_carProj\\ICT2101-team-p3-3-TCPServer\\ICT2101-team-p3-3.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\rcwww\\.nuget\\packages\\microsoft.netcore.app.host.win-x64\\3.1.21\\microsoft.netcore.app.host.win-x64.3.1.21.nupkg.sha512"
+  ],
+  "logs": []
+}

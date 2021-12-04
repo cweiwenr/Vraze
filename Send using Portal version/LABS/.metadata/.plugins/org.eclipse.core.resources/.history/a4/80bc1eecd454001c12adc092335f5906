@@ -1,0 +1,380 @@
+#include <main.h>
+/******************************************************************************
+ * PWM and Timer Configurations
+ *
+ * pwmConfig          - PWM Configuration for the right wheel
+ * pwmConfig2         - PWM Configuration for the left wheel
+ * upConfig           - Timer Configuration for Ultrasonic sensor
+ *******************************************************************************/
+Timer_A_PWMConfig pwmConfig =
+{
+    TIMER_A_CLOCKSOURCE_SMCLK,              // SMCLK Clock Source 24MHz
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,          // SMCLK/1 = 3MHz
+    10000,                                  // Period = 10000
+    TIMER_A_CAPTURECOMPARE_REGISTER_1,
+    TIMER_A_OUTPUTMODE_RESET_SET,
+    0                                       // Duty Cycle = 0%
+};
+
+Timer_A_PWMConfig pwmConfig2 =
+{
+    TIMER_A_CLOCKSOURCE_SMCLK,              // Same as pwmConfig
+    TIMER_A_CLOCKSOURCE_DIVIDER_1,
+    10000,
+    TIMER_A_CAPTURECOMPARE_REGISTER_2,
+    TIMER_A_OUTPUTMODE_RESET_SET,
+    0
+};
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void main()
+{
+    /* Stop Watchdog Timer */
+    MAP_WDT_A_holdTimer();
+
+    /* Master CLK frequency*/
+    CS_setDCOCenteredFrequency(CS_DCO_FREQUENCY_24);
+
+    engineState = CAR_ENGINE_OFF;
+    Initialise_IO();
+    Initialise_CarMotor();
+    Initialise_Encoder();
+    Initialise_TimerA1();
+    Initialise_EspUART();
+    Initalise_HCSR04();
+    enableInterrupts();
+
+    //char dataSend[] = "client\r\n\r\n";
+    //uint32_t t = sizeof(dataSend) - 1;
+    //ESP8266_SendData(dataSend, t);
+
+    /* Ready Green LED*/
+    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN0);
+
+    /* Program's loop */
+    while (1)
+    {
+
+        /* Let TCP Serve know this connection is from car*/
+        char dataSend[] = "client\r\n\r\n";
+        uint32_t t = sizeof(dataSend) - 1;
+        ESP8266_SendData(dataSend, t);
+
+        /* Fill up ESP8266 buffer before processing data*/
+        while (ESP8266_WaitForAnswer(200))
+        {
+            /* Set wifi state if there are instructions*/
+            wifiState = CAR_RECEIVED_INSTRUCTION;
+        }
+        if (wifiState == CAR_RECEIVED_INSTRUCTION)
+        {
+            /* Process instructions*/
+            /* Start engine first*/
+
+            engineState = CAR_ENGINE_ON;
+            /* Variables for processing instructions*/
+            uint16_t i = 0;
+            char temp[2048];
+            char c;
+            char historyID[3];
+
+            /* Get instructions from ESP8266 Buffer and process it*/
+            instructionBuffer = ESP8266_GetBuffer();
+            instructionBuffer = strtok(instructionBuffer, ":");
+            instructionBuffer = strtok(NULL, ":");
+            strncpy(historyID, instructionBuffer, 2);
+            historyID[2] = '\0';
+            /* String copy buffer so that we can iterate each character*/
+            strcpy(temp, instructionBuffer += 2);
+            uint16_t str_len = strlen(temp);
+            __delay_cycles(80000);
+            printf("%s\n", temp[0]);
+            if (temp[0] == 'h')
+            {
+                printf("here\n");
+                char dataSend[] = "client\r\n\r\n";
+                uint32_t t = sizeof(dataSend) - 1;
+                ESP8266_SendData(dataSend, t);
+            }
+            else
+            {
+                for (i; temp[i]; i++)
+                {
+
+                    __delay_cycles(30000);
+
+                    if((getHCSR04Distance() < MIN_DISTANCE))
+                    {
+                        /* Send data to web portal*/
+                        //engineState = CAR_ENGINE_OFF;
+                        GPIO_setOutputHighOnPin(GPIO_PORT_P1, GPIO_PIN0);
+                        //break;
+
+                    }
+
+                    __delay_cycles(30000);
+                    c = temp[i];
+                    if (c == 'F')
+                        moveCar(c);
+                    else if (c == 'B')
+                        moveCar(c);
+                    else if (c == 'R')
+                        moveCar(c);
+                    else if (c == 'L')
+                        moveCar(c);
+                }
+
+                float finalRPM = calculateRPM();
+                float finalDistance = calculateDistance(finalRPM);
+                char dataSend[] = "ChistoryId=";
+                strcat(dataSend, historyID);
+                strcat(dataSend, "&distance=");
+                strcat(dataSend, Distance);
+                strcat(dataSend, "&speed=");
+                strcat(dataSend, RPM);
+                uint32_t t = sizeof(dataSend) - 1;
+                ESP8266_SendData(dataSend, t);
+                engineState = CAR_ENGINE_OFF;
+            }
+
+        }
+        engineState = CAR_ENGINE_OFF;
+        wifiState = CAR_WAITING_INSTRUCTION;
+        GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);
+        //PCM_gotoLPM0();
+    }
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void moveCar(char dir)
+{
+    if(dir == 'F')
+    {
+        desiredNotches = 40;
+        setWheelDirection(CAR_WHEEL_FORWARD);
+    }
+    else if (dir == 'B')
+    {
+        desiredNotches = 40;
+        setWheelDirection(CAR_WHEEL_BACKWARD);
+    }
+    else if (dir == 'R')
+    {
+        desiredNotches = 10;
+        //setWheelDirection(CAR_WHEEL_RIGHT);
+
+        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN0);
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN2);
+        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN4);
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN5);
+    }
+    else if (dir == 'L')
+    {
+        desiredNotches = 10;
+        //setWheelDirection(CAR_WHEEL_LEFT);
+
+        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN2);
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN0);
+        GPIO_setOutputHighOnPin(GPIO_PORT_P4, GPIO_PIN4);
+        GPIO_setOutputLowOnPin(GPIO_PORT_P4, GPIO_PIN5);
+    }
+
+    /* Off Green LED when car is moving or not ready*/
+    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN1);
+    if (engineState == CAR_ENGINE_ON)
+    {
+        /* Start timer for RPM speed calculations, then call PID contoller to generate PWM*/
+        Timer_A_startCounter(TIMER_A1_BASE, TIMER_A_UP_MODE);
+        clearCounters();
+        if (dir == 'L' || dir == 'R')
+        {
+            turnCar(desiredNotches);
+        }
+        else if (dir == 'F' || dir == 'B')
+        {
+            getPIDOutput(desiredNotches, dir);
+        }
+        Timer_A_stopTimer(TIMER_A1_BASE);
+    }
+    GPIO_toggleOutputOnPin(GPIO_PORT_P2, GPIO_PIN1);
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void turnCar(uint32_t targetNotch)
+{
+    while(rightNotchesDetected < targetNotch && leftNotchesDetected < targetNotch)
+    {
+        __delay_cycles(5000);
+        pwmConfig.dutyCycle = 8000;
+        pwmConfig2.dutyCycle = 8000;
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    }
+    stopCar();
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void getPIDOutput(uint32_t targetNotch, char dir)
+{
+    float kp = 0.12;
+    float ki = 0.08;
+    float kd = 0.06;
+
+    float currentL = 0;
+    float currentR = 0;
+
+    float minDiff = 0;
+
+    do
+    {
+        __delay_cycles(5000);
+
+        float errorL = targetNotch - leftNotchesDetected;
+        float errorR = targetNotch - rightNotchesDetected;
+
+        if (errorL < minDiff && errorL != 0)
+        {
+            errorTl += errorL;
+        }
+        else
+        {
+            errorTl = 0;
+        }
+        if (errorR < minDiff && errorR != 0)
+        {
+            errorTr += errorR;
+        }
+        else
+        {
+            errorTr = 0;
+        }
+        if (errorTl > 50/ki)
+        {
+            errorTl = 50/ki;
+        }
+        if (errorTr > 50/ki)
+        {
+            errorTr = 50/ki;
+        }
+        if (errorL == 0)
+        {
+            derivativeL = 0;
+        }
+        if (errorR == 0)
+        {
+            derivativeR = 0;
+        }
+
+        /* PID CALCULATIONS*/
+        proportionL = errorL * kp;
+        proportionR = errorR * kp;
+
+        integralL = errorTl * ki;
+        integralR = errorTr * ki;
+
+        derivativeL = (errorL - lastErrorL) * kd;
+        derivativeR = (errorR - lastErrorR) * kd;
+
+        /* Update last errors*/
+        lastErrorL = errorL;
+        lastErrorR = errorR;
+
+        /* Value to be sent to the motors*/
+        currentR = (proportionR + integralR + derivativeR) * 10000;
+        currentL = (proportionL + integralL + derivativeL) * 10000;
+
+        /* Adjust PWM*/
+        pwmConfig.dutyCycle = currentR;
+        pwmConfig2.dutyCycle = currentL;
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+        Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    } while (leftNotchesDetected < targetNotch || rightNotchesDetected < targetNotch);
+    stopCar();
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void stopCar(void)
+{
+    __delay_cycles(5000);
+    pwmConfig.dutyCycle = 0;
+    pwmConfig2.dutyCycle = 0;
+    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig2);
+    Timer_A_generatePWM(TIMER_A0_BASE, &pwmConfig);
+    Timer_A_stopTimer(TIMER_A1_BASE);
+    clearCounters();
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void clearCounters(void)
+{
+    Timer_A_clearTimer(TIMER_A1_BASE);
+    rightNotchesDetected = 0;
+    timeSeconds = 0;
+    leftNotchesDetected = 0;
+    leftSpeed = 0;
+    rightSpeed = 0;
+    leftRPM = 0;
+    rightRPM = 0;
+    leftError = 0;
+    rightError = 0;
+    errorTl = 0;
+    errorTr = 0;
+    lastErrorL = 0;
+    lastErrorR = 0;
+    proportionL = 0;
+    proportionR = 0;
+    integralL = 0;
+    integralR = 0;
+    derivativeL = 0;
+    derivativeR = 0;
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void PORT2_IRQHandler(void)
+{
+    uint32_t status;
+    status = GPIO_getEnabledInterruptStatus(GPIO_PORT_P2);
+
+    if (status & GPIO_PIN7)
+    {
+        rightNotchesDetected += 1;
+        GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN7);
+    }
+    if (status & GPIO_PIN6)
+    {
+        leftNotchesDetected += 1;
+        GPIO_clearInterruptFlag(GPIO_PORT_P2, GPIO_PIN6);
+    }
+}
+
+// -------------------------------------------------------------------------------------------------------------------
+
+void TA1_0_IRQHandler(void)
+{
+    /* Increment global variable (count number of interrupt occurred)*/
+    timeSeconds += 1;
+    /* Clear interrupt flag*/
+    Timer_A_clearCaptureCompareInterrupt(TIMER_A1_BASE, TIMER_A_CAPTURECOMPARE_REGISTER_0);
+}
+
+float calculateRPM(void)
+{
+    /* RPM*/
+    leftRPM = ((leftNotchesDetected/timeSeconds)/20.0)*60;
+    rightRPM = ((rightNotchesDetected/timeSeconds)/20.0)*60;
+    return leftRPM;
+}
+
+float calculateDistance(float speed)
+{
+    float distance = speed * timeSeconds;
+    timeSeconds = 0;
+    return distance;
+}

@@ -1,0 +1,36 @@
+﻿@model IEnumerable<Vraze.Models.Facilitator>
+@{ ViewData["Title"] = "Facilitator Management Page"; }
+
+<div class="text-left">
+    <h1 class="display-4">Facilitator Management</h1>
+</div>
+<div class="d-flex flex-row-reverse mb-2">
+    <a class="btn btn-info" asp-action="Create" asp-controller="Admin">Add New Facilitator</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">Facilitator Id</th>
+                <th scope="col">Username</th>
+                <th scope="col">Name</th>
+                <th>Is Deleted</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td>@item.FacilitatorId</td>
+                    <td>@item.Username</td>
+                    <td>@item.FacilitatorName</td>
+                    <td>@Html.DisplayFor(modelItem => item.IsDeleted)</td>
+                    <td>
+                        <a asp-action="Edit" asp-route-id="@item.FacilitatorId" class="btn btn-sm btn-info">Edit</a>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

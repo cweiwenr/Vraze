@@ -1,0 +1,29 @@
+﻿@{
+    ViewData["Title"] = "Join Game Session";
+ }
+<div class="text-center">
+    <h1 class="display-4">Join a Game Session</h1>
+</div>
+<div class="col-md-6 mx-auto">
+    @if (ViewData.ContainsKey("message"))
+    {
+        <div class="alert alert-danger alert-dismissible fade show">
+            @ViewData["message"]
+            <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                <span aria-hidden="true">&times;</span>
+            </button>
+        </div>
+    }
+    <form asp-action="JoinSession">
+        <div class="form-group">
+            <label for="tbAccessCode">Session Room Code</label>
+            <input type="text" class="form-control" id="tbAccessCode" name="AccessCode" aria-describedby="accessCodeHelp">
+            <small id="accessCodeHelp" class="form-text text-muted">This should be provided to you by your facilitator.</small>
+        </div>
+        <div class="form-group">
+            <label for="tbStudentId">Student ID</label>
+            <input type="text" class="form-control" name="StudentId" id="tbStudentId">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Join</button>
+    </form>
+</div>

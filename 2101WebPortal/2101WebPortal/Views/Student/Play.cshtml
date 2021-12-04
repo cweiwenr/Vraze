@@ -1,0 +1,410 @@
+﻿@model Vraze.Models.Challenge;
+@{
+    ViewData["Title"] = "Play Challenge";
+}
+
+@section Scripts
+{
+    <script src="~/lib/blockly/blockly_compressed.js?v=202106271134"></script>
+    <script src="~/lib/blockly/blocks_compressed.js?v=202106271134"></script>
+    <script src="~/lib/blockly/msg/js/en.js?v=202106271134"></script>
+    <script src="~/lib/blockly/javascript_compressed.js"></script>
+
+    <style>
+        .checkmark__circle {
+            stroke-dasharray: 166;
+            stroke-dashoffset: 166;
+            stroke-width: 2;
+            stroke-miterlimit: 10;
+            stroke: #7ac142;
+            fill: none;
+            animation: stroke 0.6s cubic-bezier(0.65, 0, 0.45, 1) forwards;
+        }
+
+        .checkmark {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            display: block;
+            stroke-width: 2;
+            stroke: #fff;
+            stroke-miterlimit: 10;
+            margin: 10% auto;
+            box-shadow: inset 0px 0px 0px #7ac142;
+            animation: fill .4s ease-in-out .4s forwards, scale .3s ease-in-out .9s both;
+        }
+
+        .checkmark__check {
+            transform-origin: 50% 50%;
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: stroke 0.3s cubic-bezier(0.65, 0, 0.45, 1) 0.8s forwards;
+        }
+
+        @@keyframes stroke {
+            100% {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        @@keyframes scale {
+            0%, 100% {
+                transform: none;
+            }
+
+            50% {
+                transform: scale3d(1.1, 1.1, 1);
+            }
+        }
+
+        @@keyframes fill {
+            100% {
+                box-shadow: inset 0px 0px 0px 30px #7ac142;
+            }
+        }
+
+        .carousel-control-prev-icon {
+            background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23424242' viewBox='0 0 8 8'%3E%3Cpath d='M5.25 0l-4 4 4 4 1.5-1.5-2.5-2.5 2.5-2.5-1.5-1.5z'/%3E%3C/svg%3E") !important;
+        }
+
+        .carousel-control-next-icon {
+            background-image: url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23424242' viewBox='0 0 8 8'%3E%3Cpath d='M2.75 0l-1.5 1.5 2.5 2.5-2.5 2.5 1.5 1.5 4-4-4-4z'/%3E%3C/svg%3E") !important;
+        }
+    </style>
+}
+
+<div class="row">
+    <div class="col-md-12">
+        <h6>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Student" asp-action="Index">Home</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Attempt Challenge @Model.ChallengeId</li>
+                </ol>
+            </nav>
+        </h6>
+    </div>
+</div>
+<div id="modalTutorial" class="modal" tabindex="-1" role="dialog">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Tutorial Guide</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="carouselExampleControls" class="carousel slide" data-ride="carousel" data-interval="false">
+                    <div class="carousel-inner">
+                        <div class="carousel-item active">
+                            <img src="https://res.cloudinary.com/dj6afbyih/image/upload/v1638004271/ezgif.com-gif-maker_qcpsvp.gif" class="d-block w-100" alt="...">
+                            <div class="carousel-caption d-none d-md-block py-1 px-2" style="background-color: rgba(0,0,0,0.3);">
+                                <h5>Step 1</h5>
+                                <p>Click and drag the command block into your workspace.</p>
+                            </div>
+                        </div>
+                        <div class="carousel-item">
+                            <img src="https://res.cloudinary.com/dj6afbyih/image/upload/v1638006937/goal_msuqj8.jpg" class="d-block w-100" alt="...">
+                            <div class="carousel-caption d-none d-md-block py-1 px-2" style="background-color: rgba(0,0,0,0.3);">
+                                <h5>Step 2</h5>
+                                <p>Click the <span class="badge badge-info" style="font-size:14px;">Submit</span> button to send your command to the car.</p>
+                            </div>
+                        </div>
+                        <div class="carousel-item">
+                            <div class="d-flex justify-content-center w-100" style="min-height: 263.97px;">
+                                <svg class="checkmark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 52">
+                                    <circle class="checkmark__circle" cx="26" cy="26" r="25" fill="none" />
+                                    <path class="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
+                                </svg>
+                            </div>
+                            <div class="carousel-caption d-none d-md-block py-1 px-2" style="background-color: rgba(0,0,0,0.3);">
+                                <h5>Step 3</h5>
+                                <p>If you solve the challenge, you get to see your car move! Else, you will receive a hint.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <a class="carousel-control-prev" href="#carouselExampleControls" role="button" data-slide="prev">
+                        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+                        <span class="sr-only">Previous</span>
+                    </a>
+                    <a class="carousel-control-next" href="#carouselExampleControls" role="button" data-slide="next">
+                        <span class="carousel-control-next-icon" aria-hidden="true"></span>
+                        <span class="sr-only">Next</span>
+                    </a>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-success" data-dismiss="modal">I get it!</button>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-12 text-right">
+        <span id="btnTutorial" class="btn btn-sm btn-success">See Tutorial</span>
+    </div>
+</div>
+<div class="row">
+    <div class="col-md-12 text-center mb-2">
+        <img src="@Model.MapImageUrl" alt="mapImage" width="300" />
+    </div>
+    <div class="col-md-10">
+        <p class="text-justify">Solve the challenge by using the follow command blocks below! Once you are ready to submit your solution, click on the <span class="badge badge-info" style="font-size: 14px;">Submit</span> button!</p>
+    </div>
+    <div class="col-md-2">
+        <span class="btn btn-info btn-block" id="btnSubmit">Submit</span>
+    </div>
+    <div class="col-md-12 mt-2">
+        <input type="text" id="tbCarCommand" class="form-control w-100 d-none" />
+        <div id="blocklyDiv" style="height: 480px; width: 100%;"></div>
+        <xml id="toolbox" style="display: none">
+            @*<block type="controls_if"></block>
+            <block type="control_while"></block>*@
+            <block type="controls_repeat_ext"></block>
+            @*<block type="logic_compare"></block>*@
+            <block type="math_number"></block>
+            <block type="control_left"></block>
+            <block type="control_forward"></block>
+            <block type="control_backward"></block>
+            <block type="control_right"></block>
+            @*<block type="no_obs"></block>*@
+        </xml>
+        <!--Insert blocky code here!-->
+    </div>
+</div>
+
+<!--Start of Javascript Portion-->
+<script>
+    var workspace = null;
+    function setupBlockly()
+    {
+        Blockly.Blocks['control_left'] = {
+            init: function () {
+                this.appendDummyInput()
+                    .setAlign(Blockly.ALIGN_CENTRE)
+                    .appendField("turn left");
+                this.setPreviousStatement(true, null);
+                this.setNextStatement(true, null);
+                this.setColour(230);
+                this.setTooltip("");
+                this.setHelpUrl("");
+            }
+        };
+        Blockly.Blocks['control_right'] = {
+            init: function () {
+                this.appendDummyInput()
+                    .setAlign(Blockly.ALIGN_CENTRE)
+                    .appendField("turn right");
+                this.setPreviousStatement(true, null);
+                this.setNextStatement(true, null);
+                this.setColour(120);
+                this.setTooltip("");
+                this.setHelpUrl("");
+            }
+        };
+        Blockly.Blocks['control_forward'] = {
+            init: function () {
+                this.appendDummyInput()
+                    .setAlign(Blockly.ALIGN_CENTRE)
+                    .appendField("forward");
+                this.setPreviousStatement(true, null);
+                this.setNextStatement(true, null);
+                this.setColour(20);
+                this.setTooltip("");
+                this.setHelpUrl("");
+            }
+        };
+        Blockly.Blocks['control_backward'] = {
+            init: function () {
+                this.appendDummyInput()
+                    .setAlign(Blockly.ALIGN_CENTRE)
+                    .appendField("turn backward");
+                this.setPreviousStatement(true, null);
+                this.setNextStatement(true, null);
+                this.setColour(65);
+                this.setTooltip("");
+                this.setHelpUrl("");
+            }
+        };
+        Blockly.Blocks['control_while'] = {
+            init: function () {
+                this.appendStatementInput("while")
+                    .setCheck(null)
+                    .setAlign(Blockly.ALIGN_CENTRE)
+                    .appendField("while");
+                this.appendStatementInput("do")
+                    .setCheck(null)
+                    .setAlign(Blockly.ALIGN_CENTRE)
+                    .appendField("do");
+                this.setPreviousStatement(true, null);
+                this.setNextStatement(true, null);
+                this.setColour(260);
+                this.setTooltip("");
+                this.setHelpUrl("");
+            }
+        };
+        Blockly.Blocks['no_obs'] = {
+            init: function () {
+                this.appendDummyInput()
+                    .appendField("no obstacles");
+                this.setPreviousStatement(true, null);
+                this.setColour(160);
+                this.setTooltip("");
+                this.setHelpUrl("");
+            }
+        };
+
+        Blockly.JavaScript['control_right'] = function (block) {
+            var statements_name = Blockly.JavaScript.statementToCode(block, 'NAME');
+            // TODO: Assemble JavaScript into code variable.
+            var code = 'R';
+            return code;
+        };
+        Blockly.JavaScript['control_forward'] = function (block) {
+            var statements_name = Blockly.JavaScript.statementToCode(block, 'NAME');
+            // TODO: Assemble JavaScript into code variable.
+            var code = 'F';
+            return code;
+        };
+        Blockly.JavaScript['control_left'] = function (block) {
+            var statements_name = Blockly.JavaScript.statementToCode(block, 'NAME');
+            // TODO: Assemble JavaScript into code variable.
+            var code = 'L';
+            return code;
+        };
+        Blockly.JavaScript['control_backward'] = function (block) {
+            var statements_name = Blockly.JavaScript.statementToCode(block, 'NAME');
+            // TODO: Assemble JavaScript into code variable.
+            var code = 'B';
+            return code;
+        };
+
+
+        workspace = Blockly.inject('blocklyDiv',
+            { toolbox: document.getElementById('toolbox') });
+    }
+
+    setupBlockly();
+    $(document).ready(function () {
+        @{ string booleanVar = "false"; }
+        @if (Model.IsTutorialChallenge)
+        {
+            booleanVar = "true";
+        }
+        var showTutorialDialog = @booleanVar;
+        if (showTutorialDialog)
+        {
+            $('#modalTutorial').modal('toggle');
+        }
+
+        $('#btnTutorial').click(function () {
+            $('#modalTutorial').modal('toggle');
+        });
+
+        $('#btnSubmit').click(function () {
+            SubmitForm();
+        });
+
+        // This function will simplify the blockly command for the robot car to process
+        function SimplifyCarCommand(blocklyCommand)
+        {
+            console.log("Received From the Blockly Workspace: ", blocklyCommand);
+
+            var indexOfKeyword = blocklyCommand.indexOf("for");
+
+            if (indexOfKeyword >= 0) {
+                var forLoopCommand = blocklyCommand.substring(indexOfKeyword, blocklyCommand.length - indexOfKeyword);
+                var carCommand = "";
+
+                var commandBeforeLoopResult = blocklyCommand.match(/(.*)for/);
+                var repeatCommandResult = blocklyCommand.match(/{\n  (.*)}/);
+                var countResult = blocklyCommand.match(/count < (.*);/);
+                var commandAfterLoopResult = blocklyCommand.match(/}\n(.*)/);
+
+                /* Append the commands before the fot loop to the carCommand variable */
+                carCommand += commandBeforeLoopResult[1];
+
+                /* Repeat the commands in the for loop and append it to the carCommand variable */
+                for (i = 0; i < parseInt(countResult[1]); i++) {
+                    carCommand += repeatCommandResult[1];
+                }
+
+                /* Append the commands after the for loop to the carCommand variable */
+                carCommand += commandAfterLoopResult[1];
+
+                console.log("Simplified Command:", carCommand);
+
+                return carCommand;
+            }
+            else {
+                return blocklyCommand;
+            }
+        }
+
+        /* This function will submit the data from the blocky code to the API */
+        function SubmitForm()
+        {
+            var carCommand = SimplifyCarCommand(Blockly.JavaScript.workspaceToCode(workspace)); 
+
+            /* Constructor representing the SendCarCommandDataModel in the Models folder */
+            function SendCarCommandDataModel(carCommand) {
+                this.CarCommand = carCommand;
+            }
+
+            /* Assign the values to the contructor so that it can be converted into Json and sent over to the API */
+            var webFormData = new SendCarCommandDataModel(carCommand);
+
+            var webFormDataInString = JSON.stringify(webFormData);
+
+            /* Send the json over to the /Student/SubmitCarCommand */
+            $.ajax({
+                    url: "/student/submitCarCommand/@Model.ChallengeId",
+                type: "POST",
+                dataType: "json",
+                contentType: "application/json",
+                data: webFormDataInString,
+                success: function (response) { /* response is the object containing the response received from the controller */
+                            console.log(response);
+                            if (response["status"] == "Correct") {
+                                Swal.fire({
+                                title: response["status"],
+                            text: response["message"],
+                            icon: 'success',
+                            showCancelButton: false,
+                        }).then((result) => {
+                            if (result.isConfirmed) {
+                                location.replace('/ChallengeHistory/View/@Model.ChallengeId');
+                            }
+                        });
+                            }
+                            else if (response["status"] == "Incorrect")
+                            {
+                                var htmlStr = '';
+
+                                for (i = 0; i < response["hints"].length; i++)
+                                {
+                                    htmlStr += ('<li>' + response["hints"][i] + '</li>');
+                                }
+
+                                Swal.fire({
+                                title: response["status"],
+                            text: response["message"],
+                            icon: 'warning',
+                            showCancelButton: false,
+                        }).then((result) => {
+                        if (result.isConfirmed) {
+                            Swal.fire({
+                            html: '<ol>' + htmlStr +'</ol>',
+                                    showCancelButton: false
+                                });
+                            }
+                        });
+                    }
+                },
+                error: function (error) { console.log(error); }
+            });
+        }
+    });
+</script>
+<!--End of Javascript Portion-->

@@ -1,0 +1,50 @@
+﻿@model IEnumerable<Vraze.Models.GameSession>
+@{ ViewData["Title"] = "Session Management Page"; }
+
+<div class="text-left">
+    <h1 class="display-4">Game Session Management</h1>
+</div>
+<div class="d-flex flex-row-reverse mb-2">
+    <a class="btn btn-info" asp-action="Create" asp-controller="GameSession">Add New Game Session</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">Game Session Id</th>
+                <th scope="col">Access Code</th>
+                <th scope="col">Challenges</th>
+                <th scope="col">Student List</th>
+                <th scope="col">Status</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+<tr>
+    <td>@item.SessionId</td>
+    <td>@item.AccessCode</td>
+    <td>@item.ChallengeList</td>
+    <td>@item.StudentList</td>
+    <td>@if (item.IsActive)
+    {<span class="badge badge-success">Started</span> }
+    else
+    { <span class="badge badge-danger">Stopped</span>}</td>
+    <td>
+        <div class="row">
+            <div class="col-md-4"><a asp-action="Edit" asp-route-id="@item.SessionId" class="btn btn-sm btn-info">Edit</a></div>
+            <div class="col-md-8">
+                @if (item.IsActive)
+                {
+<a asp-action="Stop" asp-route-id="@item.SessionId" class="btn btn-sm btn-danger">Stop Session</a> }
+                else
+                {
+<a asp-action="Start" asp-route-id="@item.SessionId" class="btn btn-sm btn-success">Start Session</a>}
+            </div>
+        </div>
+    </td>
+</tr>}
+        </tbody>
+    </table>
+</div>

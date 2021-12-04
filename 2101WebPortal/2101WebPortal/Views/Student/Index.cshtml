@@ -1,0 +1,53 @@
+﻿@{
+    ViewData["Title"] = "Dashboard";
+}
+<div class="text-center">
+    <h1 class="display-4">Challenges</h1>
+</div>
+<div class="row pl-5 ml-1">
+    @{var challenges = (IEnumerable<Challenge>)(ViewData["Challenges"]); }
+    @if (challenges.Count() > 0)
+    {
+        <div class="card-deck">
+            @foreach (Challenge challenge in challenges)
+            {
+                var challengeHistoryList = (IEnumerable<ChallengeHistory>)ViewData["ChallengeHistory"];
+                var currentHistory = (challengeHistoryList != null && challengeHistoryList.Count() > 0) ? challengeHistoryList.Where(history => history.ChallengeId == challenge.ChallengeId) : null;
+                var pointsScored = (currentHistory != null && currentHistory.Count() > 0) ? currentHistory.Max(history => history.Points) : 0;
+
+                <div class="card mb-4" style="min-width: 20rem; max-width: 20rem;">
+                    <img src="@challenge.MapImageUrl" class="card-img-top" alt="..." width="200">
+                    <div class="card-body">
+                        <div class="row mb-2">
+                            <div class="col-8">
+                                <h5 class="card-title" style="color: #2962FF">Challenge @challenge.ChallengeId</h5>
+                            </div>
+                            <!--Status of the challenge, completed or not completed-->
+                            <div class="col-4 text-right">
+                                @if (pointsScored >= 5)
+                                {
+                                    <span class="badge badge-success">Cleared</span>
+                                }
+                                else if (pointsScored < 5)
+                                {
+                                    <span class="badge badge-secondary">Not cleared</span>
+                                }
+                            </div>
+                        </div>
+                        <p class="card-text">Highest scored obtained: <span class="badge badge-pill badge-primary" style="font-size:14px; background-color:#689F38;">@pointsScored</span></p>
+                        <!--Start of buttons to play the challenge or view the challenge history for the selected challenge-->
+                        <div class="d-block">
+                            <a asp-controller="Student" asp-action="Play" asp-route-id="@challenge.ChallengeId" class="btn btn-info mr-2">Play</a>
+                            <a asp-controller="ChallengeHistory" asp-action="View" asp-route-id="@challenge.ChallengeId" class="btn btn-dark">View History</a>
+                        </div>
+                        <!--End of buttons to play the challenge or view the challenge history for the selected challenge-->
+                    </div>
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <p class="text-center w-100">Please wait for your facilitator to add the challenges.</p>
+    }
+</div>

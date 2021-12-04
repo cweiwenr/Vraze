@@ -1,0 +1,96 @@
+﻿@model IEnumerable<Vraze.Models.ChallengeHistory>;
+@{
+    ViewData["Title"] = "Challenge History";
+}
+<div class="row">
+    <div class="col-md-12">
+        <h6>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Student" asp-action="Index">Home</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">View Challenge History</li>
+                </ol>
+            </nav>
+        </h6>
+    </div>
+</div>
+<div class="col-md-10 mx-auto">
+    @if (Model.Count() > 0)
+    {
+
+        <div class="accordion" id="challengeHistoryContainer">
+            @{
+                int i = 1;
+            }
+            @foreach (var challengeHistory in Model)
+            {
+                int hintCount = (i > 3) ? 3 : i;
+                var collapseIdStr = $"collapse{i}";
+                var collapseHeadingIdStr = $"heading{i}";
+                <div class="card">
+                    <div class="card-header" id="@collapseHeadingIdStr">
+                        <h2 class="mb-0">
+                            <button class="btn btn-link collapsed" type="button" data-toggle="collapse" data-target="#@collapseIdStr" aria-expanded="false" aria-controls="@collapseIdStr">
+                                Challenge #@challengeHistory.ChallengeId - Attempt #@i
+                            </button>
+                        </h2>
+                    </div>
+
+                    <div id="@collapseIdStr" class="collapse" aria-labelledby="@collapseHeadingIdStr" data-parent="#challengeHistoryContainer">
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4 font-weight-bold">Map</div>
+                                <div class="col-md-8"><img src="@challengeHistory.Challenge.MapImageUrl" alt="" height="150" /></div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 font-weight-bold">Points</div>
+                                <div class="col-md-8">@challengeHistory.Points</div>
+                            </div>
+                            @{
+                                var studentAnswer = challengeHistory.Solution.Replace("F", "Forward, ").Replace("R", "Turn Right, ").Replace("L", "Turn Left, ").Replace("B", "Backward, ");
+                            }
+                            <div class="row">
+                                <div class="col-md-4 font-weight-bold">Your Solution</div>
+                                <div class="col-md-8">@studentAnswer.Substring(0, studentAnswer.Length-2)</div>
+                            </div>
+                            @{
+                                var solution = challengeHistory.Challenge.Solution.Replace("F", "Forward, ").Replace("R", "Turn Right, ").Replace("L", "Turn Left, ").Replace("B", "Backward, ");
+                            }
+                            @if (hintCount >= 3)
+                            {
+                                <div class="row">
+                                    <div class="col-md-4 font-weight-bold">Challenge Solution</div>
+                                    <div class="col-md-8">@solution.Substring(0, solution.Length - 2)</div>
+                                </div>
+                            }
+                            <div class="row">
+                                <div class="col-md-4 font-weight-bold">Hints</div>
+                                <div class="col-md-8">
+                                    <ol class="pl-3">
+                                        @for (int j = 0; j < hintCount; j++)
+                                        {
+                                            <li>@challengeHistory.Challenge.Hints.ToList()[j].HintInformation</li>
+                                        }
+                                    </ol>
+                                </div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 font-weight-bold">Car Distance Travelled</div>
+                                <div class="col-md-8">@challengeHistory.CarDistanceTravelled</div>
+                            </div>
+                            <div class="row">
+                                <div class="col-md-4 font-weight-bold">Car Spped</div>
+                                <div class="col-md-8">@challengeHistory.CarSpeed</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                i++;
+            }
+        </div>
+    }
+    else
+    {
+        <p>You have not attempted this challenge yet!</p>
+    }
+</div>

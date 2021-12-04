@@ -1,0 +1,230 @@
+﻿@model Vraze.Models.Facilitator
+@{
+    ViewData["Title"] = "Edit Facilitator";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Edit Facilitator Information</h1>
+</div>
+<div class="row">
+    <div class="col-md-12">
+        <h6>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a asp-controller="Admin" asp-action="Home">Home</a></li>
+                    <li class="breadcrumb-item"><a asp-controller="Admin" asp-action="Manage">Facilitators</a></li>
+                    <li class="breadcrumb-item active" aria-current="page">Edit Facilitator Information</li>
+                </ol>
+            </nav>
+        </h6>
+    </div>
+</div>
+<div class="col-lg-8 mx-auto mt-3">
+    <div class="card">
+        <div class="card-body">
+            <h2 class="text-info">Facilitator Account Information</h2>
+            <div id="errorMsgAlert" class="alert alert-warning alert-dismissible fade show d-none" role="alert">
+                <span id="errorMsgAlertMsg"></span>
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <form>
+                <div class="form-group row">
+                    <label class="col-md-3 form-label">Username</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" value="@Model.Username" id="tbUsername" required>
+                        <div id="tbUsernameFeedback" class="custom-feedback-msg"></div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-md-3 form-label">Facilitator Name</label>
+                    <div class="col-sm-9">
+                        <input type="text" class="form-control" value="@Model.FacilitatorName" id="tbName" required>
+                        <div id="tbNameFeedback" class="custom-feedback-msg"></div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label class="col-md-3 form-label">Password</label>
+                    <div class="col-sm-9">
+                        <input type="password" class="form-control" id="tbPassword" required>
+                        <div id="tbPasswordFeedback" class="custom-feedback-msg"></div>
+                    </div>
+                </div>
+                <div class="form-group row">
+                    @if (Model.IsDeleted)
+                    {
+                        <div class="col-md-6">
+                            <a asp-action="Manage" asp-controller="Admin" id="btnBack" class="btn btn-secondary btn-block">Back</a>
+                        </div>
+                        <div class="col-md-6">
+                            <span id="btnRestore" class="btn btn-warning btn-block">Restore</span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="col-md-4">
+                            <a asp-action="Manage" asp-controller="Admin" id="btnBack" class="btn btn-success btn-block"><i class="fas fa-sign-out-alt"></i> Back</a>
+                        </div>
+                        <div class="col-md-4">
+                            <span id="btnSubmit" class="btn btn-primary btn-block">Update</span>
+                        </div>
+                        <div class="col-md-4">
+                            <span id="btnDelete" class="btn btn-danger btn-block">Delete</span>
+                        </div>
+                    }
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    $(document).ready(function () {
+        $("#btnSubmit").click(function (e) {
+            e.preventDefault();
+            SubmitForm();
+        });
+
+        var deleteApi = '../Delete/@Model.FacilitatorId';
+        $("#btnDelete").click(function () {
+            Swal.fire({
+                title: 'Are you sure you want to delete this facilitator?',
+                icon: 'warning',
+                showCancelButton: true,
+                cancelButtonText: 'No',
+                confirmButtonText: 'Yes',
+                showLoaderOnConfirm: true,
+                preConfirm: (login) => {
+                    return fetch(deleteApi)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(response.statusText)
+                            }
+                            console.log("respone: ", response);
+                            location.replace('/Admin/Manage');
+                        })
+                        .catch(error => {
+                            Swal.showValidationMessage(
+                                `Request failed: ${error}`
+                            )
+                        })
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            });
+        });
+
+        var restoreApi = '../Restore/@Model.FacilitatorId';
+        $("#btnRestore").click(function () {
+            Swal.fire({
+                title: 'Are you sure you want to restore this facilitator?',
+                icon: 'warning',
+                showCancelButton: true,
+                cancelButtonText: 'No',
+                confirmButtonText: 'Yes',
+                showLoaderOnConfirm: true,
+                preConfirm: (login) => {
+                    return fetch(restoreApi)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(response.statusText)
+                            }
+                            console.log("respone: ", response);
+                            location.replace('/Admin/Manage');
+                        })
+                        .catch(error => {
+                            Swal.showValidationMessage(
+                                `Request failed: ${error}`
+                            )
+                        })
+                },
+                allowOutsideClick: () => !Swal.isLoading()
+            });
+        });
+
+        function ValidateForm()
+        {
+            var valid = true;
+
+            var username = $("#tbUsername").val();
+            var password = $("#tbPassword").val();
+            var name = $('#tbName').val();
+
+            /*Resets all feedback messages*/
+            $(".custom-feedback-msg").text("");
+            $(".custom-feedback-msg").removeClass("invalid-feedback");
+
+            if (username === "")
+            {
+                $("#tbUsername").addClass("is-invalid");
+                $("#tbUsernameFeedback").addClass("invalid-feedback");
+                $("#tbUsernameFeedback").text("Please do not leave this blank.");
+
+                valid &= false;
+            }
+            else {
+                valid &= true;
+                $("#tbUsername").removeClass("is-invalid");
+            }
+
+            if (password === "") {
+                $("#tbPassword").addClass("is-invalid");
+                $("#tbPasswordFeedback").addClass("invalid-feedback");
+                $("#tbPasswordFeedback").text("Please do not leave this blank.");
+
+                valid &= false;
+            }
+            else {
+                valid &= true;
+                $("#tbPassword").removeClass("is-invalid");
+            }
+
+            if (name === "") {
+                $("#tbName").addClass("is-invalid");
+                $("#tbNameFeedback").addClass("invalid-feedback");
+                $("#tbNameFeedback").text("Please do not leave this blank.");
+
+                valid &= false;
+            }
+            else {
+                valid &= true;
+                $("#tbName").removeClass("is-invalid");
+            }
+            return valid;
+        }
+
+        function SubmitForm() {
+            var username = $("#tbUsername").val();
+            var password = $("#tbPassword").val();
+            var name = $('#tbName').val();
+
+            if (ValidateForm()) {
+                function WebFormData(username, name, password) {
+                    this.Username = username;
+                    this.FacilitatorName = name;
+                    this.PasswordHash = password;
+                }
+                var webFormData = new WebFormData(username, name, password);
+
+                var webFormDataInString = JSON.stringify(webFormData);
+
+                $.ajax({
+                    url: "/admin/edit/@Model.FacilitatorId",
+                    type: "POST",
+                    dataType: "json",
+                    contentType: "application/json",
+                    data: webFormDataInString,
+                    success: function (response) {
+                        console.log(response)
+                        location.replace('/Admin/Manage');
+                    },
+                    error: function (error) {
+                        console.log(error);
+                        $("#errorMsgAlertMsg").text(error["responseJSON"]["message"]);
+                        $('#errorMsgAlert').removeClass('d-none');
+                    }
+                });
+            }
+        }
+    });
+</script>

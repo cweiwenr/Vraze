@@ -1,0 +1,47 @@
+﻿@model IEnumerable<Vraze.Models.Challenge>
+@{
+    ViewData["Title"] = "Challenge Management";
+}
+<div class="text-left">
+    <h1 class="display-4">Challenge Management</h1>
+</div>
+<div class="d-flex flex-row-reverse mb-2">
+    <a class="btn btn-info" asp-action="Create" asp-controller="Challenge">Add New Challenge</a>
+</div>
+<div class="table-responsive">
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th scope="col">Challenge Id</th>
+                <th scope="col">Map Image</th>
+                <th scope="col">Hints</th>
+                <th scope="col">Solution</th>
+                <th scope="col">Is Tutorial Challenge</th>
+                <th scope="col">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var item in Model)
+            {
+                <tr>
+                    <td>@Html.DisplayFor(modelItem => item.ChallengeId)</td>
+                    <td><img src="@item.MapImageUrl" alt="" width="90" /></td>
+                    <td>
+                        <ol class="pl-2">
+                            @if (item.Hints != null)
+                            {
+                                foreach (var hint in item.Hints)
+                                {
+                                    <li>@hint.HintInformation</li>
+                                }
+                            }
+                        </ol>
+                    </td>
+                    <td>@Html.DisplayFor(modelItem => item.Solution)</td>
+                    <td>@Html.DisplayFor(modelItem => item.IsTutorialChallenge)</td>
+                    <td><a asp-action="Edit" asp-route-id="@item.ChallengeId" class="btn btn-sm btn-info">Edit</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>

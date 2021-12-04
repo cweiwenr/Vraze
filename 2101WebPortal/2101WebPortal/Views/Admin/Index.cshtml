@@ -1,0 +1,39 @@
+﻿@{
+    ViewData["Title"] = "Dashboard";
+}
+<div class="card-deck">
+    @if (@ViewData["role"].ToString() == "Admin")
+    {
+        <div class="card">
+            <div class="card-img-top d-flex justify-content-center align-items-center" style="width: 100%; height: 120px; background-color: #9FA8DA; "><i class="fas fa-user-circle fa-4x"></i></div>
+            <div class="card-body">
+                <h5 class="card-title">Manage Facilitator Accounts</h5>
+                <ul class="p-0 list-unstyled">
+                    <li class="my-1"><a asp-controller="Admin" asp-action="Create" class="btn btn-sm btn-info">Create New Facilitator Account</a></li>
+                    <li class="my-1"><a asp-controller="Admin" asp-action="Manage" class="btn btn-sm btn-warning">Modify Facilitator Account</a></li>
+                </ul>
+            </div>
+        </div>
+    }
+    <div class="card">
+        <div class="card-img-top d-flex justify-content-center align-items-center" style="width: 100%; height: 120px; background-color: #D4E157; "><i class="fas fa-key fa-4x"></i></div>
+        <div class="card-body">
+            <h5 class="card-title">Manage Game Sessions</h5>
+            <ul class="p-0 list-unstyled">
+                <li class="my-1"><a asp-controller="GameSession" asp-action="Create" class="btn btn-sm btn-info">Create New Game Session</a></li>
+                <li class="my-1"><a asp-controller="GameSession" asp-action="Manage" class="btn btn-sm btn-warning">Modify Game Sessions</a></li>
+                <li class="my-1"><a asp-controller="GameSession" asp-action="Manage" class="btn btn-sm btn-success">Start/Stop Game Session</a></li>
+            </ul>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-img-top d-flex justify-content-center align-items-center" style="width: 100%; height: 120px; background-color: #80CBC4;"><i class="fas fa-puzzle-piece fa-4x"></i></div>
+        <div class="card-body">
+            <h5 class="card-title">Manage Challenges</h5>
+            <ul class="p-0 list-unstyled">
+                <li class="my-1"><a asp-controller="Challenge" asp-action="Create" class="btn btn-sm btn-info">Create New Challenge</a></li>
+                <li class="my-1"><a asp-controller="Challenge" asp-action="Manage" class="btn btn-sm btn-warning">Modify Challenge Information</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
